@@ -1,0 +1,3 @@
+[submodule "src/engine_web-ifc"]
+	path = src/engine_web-ifc
+	url = https://github.com/ThatOpen/engine_web-ifc
