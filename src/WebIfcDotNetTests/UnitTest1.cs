@@ -15,5 +15,15 @@ namespace WebIfcDotNetTests
             var r = new ThisIsAManagedClass();
             Console.WriteLine(r.MyString);
         }
+
+        [Test]
+        public void Test2()
+        {
+            var api = new DotNetApi();
+            var id = api.OpenModel("C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\examples\\example.ifc");
+            Console.WriteLine($"Id = {id}");
+            var size = api.GetModelSize((uint)id);
+            Console.WriteLine($"Model size = {size}");
+        }
     }
 } 
