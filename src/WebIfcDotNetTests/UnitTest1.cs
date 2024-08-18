@@ -24,6 +24,9 @@ namespace WebIfcDotNetTests
             Console.WriteLine($"Id = {id}");
             var size = api.GetModelSize((uint)id);
             Console.WriteLine($"Model size = {size}");
+            var lines = new List<uint>();
+            api.GetAllLines( (uint)id, lines );
+            Console.WriteLine($"Found {lines.Count} lines");
         }
     }
 } 
