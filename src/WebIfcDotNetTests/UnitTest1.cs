@@ -28,5 +28,19 @@ namespace WebIfcDotNetTests
             api.GetAllLines( (uint)id, lines );
             Console.WriteLine($"Found {lines.Count} lines");
         }
+
+        [Test]
+        public void Test3()
+        {
+            var api = new DotNetApi();
+            var modelId = api.OpenModel("C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\examples\\example.ifc");
+            var lines = new List<uint>();
+            api.GetAllLines((uint)modelId, lines);
+            for (var i = 0; i < lines.Count && i < 100; i++)
+            {
+                var lt = api.GetLineType((uint)modelId, lines[i]);
+                Console.WriteLine($"Line {i}, id = {lines[i]}, type = {lt}");
+            }
+        }
     }
 } 
