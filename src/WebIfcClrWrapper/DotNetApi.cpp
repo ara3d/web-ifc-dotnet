@@ -1,7 +1,9 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. 
+ */
 
+#pragma unmanaged
 #include <string>
 #include <algorithm>
 #include <vector>
@@ -9,21 +11,24 @@
 #include <cstdint>
 #include <memory>
 #include <spdlog/spdlog.h>
-#include "modelmanager/Modelmanager.h"
-#include "version.h"
+#include "../engine_web-ifc/src/cpp/modelmanager/ModelManager.h"
+#include "../engine_web-ifc/src/cpp/version.h"
 #include <iostream>
 #include <fstream>
+#pragma managed 
 
 #include <msclr\marshal_cppstd.h>
 
 // NOTE: this class is a combination of.
 // https://github.com/ThatOpen/engine_web-ifc/blob/main/src/ts/web-ifc-api.ts
 // https://github.com/ThatOpen/engine_web-ifc/blob/main/src/cpp/web-ifc-wasm.cpp
+// https://github.com/ThatOpen/engine_web-ifc/blob/main/src/cpp/web-ifc-test.cpp
+// 
 // It is build based on what the needs of Speckle are:
 // https://github.com/specklesystems/speckle-server/blob/main/packages/fileimport-service/ifc/parser_v2.js#L26
-// const lines = await this.ifcapi.GetLineIDsWithType(this.modelId, element)
 
 /*
+	const lines = await this.ifcapi.GetLineIDsWithType(this.modelId, element)
     this.modelId = this.ifcapi.OpenModel(new Uint8Array(data), { USE_FAST_BOOLS: true })
     const allProjectLines = await this.ifcapi.GetLineIDsWithType(this.modelId, WebIFC.IFCPROJECT)
     const rel = await this.ifcapi.GetLine(this.modelId, relation.get(i), false)
@@ -35,10 +40,203 @@
 
 using namespace System;
 using namespace System::Collections::Generic;
+using namespace msclr::interop;
+using namespace webifc::manager;
+using namespace webifc::parsing;
+using namespace webifc::geometry;
 
-// NOTE: having a static variable is a bad idea. 
 namespace  WebIfcClrWrapper
 {
+    public ref struct Buffer
+    {
+        IntPtr DataPtr;
+        int Size;
+        int ElementSize;
+
+        Buffer(IntPtr dataPtr, int size, int elementSize) {
+            DataPtr = dataPtr;
+            Size = size;
+            ElementSize = elementSize;
+        }
+    };
+
+    public struct Vertex
+    {
+        double Vx;
+        double Vy;
+        double Vz;
+        double Nx;
+        double Ny;
+        double Nz;
+    };
+
+    public ref class Mesh
+    {
+    private:
+
+        IfcGeometry* geometry;
+        uint32_t expressID;
+
+        template<typename T>
+        Buffer^ ToBuffer(std::vector<T>& vec) {
+            return gcnew Buffer(
+                IntPtr(vec.data()),
+                (int)vec.size(),
+                sizeof(vec[0]));
+        }
+
+    public:
+
+        Mesh(IfcGeometry* geom, uint32_t expressID) {
+            this->geometry = geom;
+            this->expressID = expressID;
+        }
+
+        uint32_t GetExpressID() {
+            return expressID;
+        }
+
+        Buffer^ GetVertexData() {
+            return ToBuffer(geometry->vertexData);
+        }
+
+        Buffer^ GetIndexData() {
+            return ToBuffer(geometry->indexData);
+        }
+    };
+
+    public ref struct Color
+    {
+        double R;
+        double G;
+        double B;
+        double A;
+
+        Color(double r, double g, double b, double a)
+        {
+            R = r;
+            G = g;
+            B = b;
+            A = a;
+        }
+    };
+
+    public ref class TransformedMesh
+    {
+    public:
+        Mesh^ Mesh;
+        Color^ Color;
+        array<double>^ Transform;
+    };
+
+    public ref class MeshList
+    {
+    private:
+        IfcFlatMesh* nativeFlatMesh;
+
+    public:
+
+        uint32_t ExpressID;
+
+        MeshList(IfcFlatMesh* mesh, uint32_t expressID) {
+            this->nativeFlatMesh = mesh;
+            this->ExpressID = expressID;
+            Meshes = gcnew List<TransformedMesh^>(mesh->geometries.size());
+        }
+
+        List<TransformedMesh^>^ Meshes;
+    };
+
+    public ref class Model
+    {
+    private:
+
+        ModelManager* manager;
+        IfcLoader* loader;
+        IfcGeometryProcessor* geometryProcessor;        
+
+    public:
+
+        int Id;
+
+        Model(ModelManager* mm, int id, IfcLoader* loader) {
+            this->manager = mm;
+            this->Id = id;
+            this->geometryProcessor = manager->GetGeometryProcessor(id);
+            this->loader = loader;
+        }
+
+        int Size() {
+            return loader->GetTotalSize();
+        }
+
+        List<MeshList^>^ GetMeshes() {   
+            auto r = gcnew List<MeshList^>(2);
+
+            for (auto type : manager->GetSchemaManager().GetIfcElementList())
+            {
+                // TODO: maybe some of these elments are desired. 
+                if (type == webifc::schema::IFCOPENINGELEMENT 
+                    || type == webifc::schema::IFCSPACE 
+                    || type == webifc::schema::IFCOPENINGSTANDARDCASE)
+                {
+                    continue;
+                }
+                
+                auto typeName = marshal_as<System::String^>(manager->GetSchemaManager().IfcTypeCodeToType(type));
+                
+                // TEMP: debugging
+                //System::Console::WriteLine("Processing types: " + typeName);
+
+                for (auto e : loader->GetExpressIDsWithType(type))
+                {
+                    auto flatMesh = geometryProcessor->GetFlatMesh(e);
+                    auto meshList = gcnew MeshList(&flatMesh, e);
+                    for (auto& placedGeom : flatMesh.geometries)
+                    {
+                        auto mesh = Convert(placedGeom);
+                        meshList->Meshes->Add(mesh);
+                    }                  
+                    r->Add(meshList);
+                }
+            }
+
+            return r;
+        }
+
+        TransformedMesh^ Convert(IfcPlacedGeometry& pg) {
+            auto r = gcnew TransformedMesh();
+            r->Mesh = GetMesh(pg.geometryExpressID);
+            r->Color = gcnew Color(pg.color.r, pg.color.g, pg.color.b, pg.color.a);
+            r->Transform = gcnew array<double>(16);
+            pg.SetFlatTransformation();
+            for (int i = 0; i < 16; i++) {
+                r->Transform[i] = pg.flatTransformation[i];
+            }
+            return r;
+        }
+
+        Mesh^ GetMesh(uint32_t expressID) {
+            return gcnew Mesh(&geometryProcessor->GetGeometry(expressID), expressID);
+        }
+
+        uint32_t GetLineType(uint32_t expressID) {
+            return loader->GetLineType(expressID);
+        }
+
+        uint32_t GetMaxExpressID() {
+            return loader->GetMaxExpressId();
+        }
+
+        List<int>^ GetAllLines() {
+            auto lines = loader->GetAllLines();
+            auto list = gcnew List<int>(lines.size());
+            for (auto line : lines)
+                list->Add(line);
+            return list;
+        }
+    };
+
     public ref class DotNetApi
     {
     public:
@@ -49,88 +247,19 @@ namespace  WebIfcClrWrapper
 
         webifc::manager::ModelManager* manager
             = new webifc::manager::ModelManager(MT_ENABLED);
-
-        int CreateModel() {
-            return manager->CreateModel(*settings);
-        }
-
-        void CloseAllModels() {
-            return manager->CloseAllModels();
-        }
-
-        int OpenModel(System::String^ fileName)
-        {
+      
+        Model^ Load(System::String^ fileName) {
             auto modelID = manager->CreateModel(*settings);
             auto loader = manager->GetIfcLoader(modelID);
             std::ifstream ifs;
-            std::string unmanaged = msclr::interop::marshal_as<std::string>(fileName);
+            std::string unmanaged = marshal_as<std::string>(fileName);
             ifs.open(unmanaged, std::ifstream::in);
             loader->LoadFile(ifs);
-            return modelID;
+            return gcnew Model(manager, modelID, loader);
         }
-
-        int GetModelSize(uint32_t modelID)
-        {
-            return manager->IsModelOpen(modelID)
-                ? manager->GetIfcLoader(modelID)->GetTotalSize()
-                : 0;
-        }
-
-        void CloseModel(uint32_t modelID)
-        {
-            return manager->CloseModel(modelID);
-        }
-
-        webifc::geometry::IfcFlatMesh GetFlatMesh(uint32_t modelID, uint32_t expressID)
-        {
-            if (!manager->IsModelOpen(modelID)) return {};
-            auto mesh = manager->GetGeometryProcessor(modelID)->GetFlatMesh(expressID);
-            for (auto& geom : mesh.geometries)
-                manager->GetGeometryProcessor(modelID)->GetGeometry(geom.geometryExpressID).GetVertexData();
-            return mesh;
-        }
-
-        std::vector<webifc::geometry::IfcFlatMesh> LoadAllGeometry(uint32_t modelID)
-        {
-            if (!manager->IsModelOpen(modelID)) return std::vector<webifc::geometry::IfcFlatMesh>();
-            auto loader = manager->GetIfcLoader(modelID);
-            auto geomLoader = manager->GetGeometryProcessor(modelID);
-            std::vector<webifc::geometry::IfcFlatMesh> meshes;
-
-            for (auto type : manager->GetSchemaManager().GetIfcElementList())
-            {
-                auto elements = loader->GetExpressIDsWithType(type);
-
-                if (type == webifc::schema::IFCOPENINGELEMENT || type == webifc::schema::IFCSPACE || type == webifc::schema::IFCOPENINGSTANDARDCASE)
-                {
-                    continue;
-                }
-
-                for (uint32_t i = 0; i < elements.size(); i++)
-                {
-                    auto mesh = geomLoader->GetFlatMesh(elements[i]);
-                    for (auto& geom : mesh.geometries)
-                    {
-                        auto& flatGeom = geomLoader->GetGeometry(geom.geometryExpressID);
-                        flatGeom.GetVertexData();
-                    }
-                    meshes.push_back(std::move(mesh));
-                }
-            }
-
-            return meshes;
-        }
-
-        webifc::geometry::IfcGeometry GetGeometry(uint32_t modelID, uint32_t expressID)
-        {
-            return manager->IsModelOpen(modelID)
-                ? manager->GetGeometryProcessor(modelID)->GetGeometry(expressID)
-                : webifc::geometry::IfcGeometry();
-        }
-
-        std::vector<webifc::geometry::IfcCrossSections> GetAllCrossSections(uint32_t modelID, uint8_t dimensions)
-        {
-            if (!manager->IsModelOpen(modelID)) return std::vector<webifc::geometry::IfcCrossSections>();
+       
+        std::vector<IfcCrossSections> GetAllCrossSections(uint32_t modelID, uint8_t dimensions) {
+            if (!manager->IsModelOpen(modelID)) return std::vector<IfcCrossSections>();
             auto geomLoader = manager->GetGeometryProcessor(modelID);
 
             std::vector<uint32_t> typeList;
@@ -138,7 +267,7 @@ namespace  WebIfcClrWrapper
             typeList.push_back(webifc::schema::IFCSECTIONEDSOLID);
             typeList.push_back(webifc::schema::IFCSECTIONEDSURFACE);
 
-            std::vector<webifc::geometry::IfcCrossSections> crossSections;
+            std::vector<IfcCrossSections> crossSections;
 
             for (auto& type : typeList)
             {
@@ -146,7 +275,7 @@ namespace  WebIfcClrWrapper
 
                 for (size_t i = 0; i < elements.size(); i++)
                 {
-                    webifc::geometry::IfcCrossSections crossSection;
+                    IfcCrossSections crossSection;
                     if (dimensions == 2) crossSection = geomLoader->GetLoader().GetCrossSections2D(elements[i]);
                     else crossSection = geomLoader->GetLoader().GetCrossSections3D(elements[i]);
                     crossSections.push_back(crossSection);
@@ -156,30 +285,24 @@ namespace  WebIfcClrWrapper
             return crossSections;
         }
 
-        std::vector<webifc::geometry::IfcAlignment> GetAllAlignments(uint32_t modelID)
+        std::vector<IfcAlignment> GetAllAlignments(uint32_t modelID)
         {
-            if (!manager->IsModelOpen(modelID)) return std::vector<webifc::geometry::IfcAlignment>();
+            if (!manager->IsModelOpen(modelID)) return std::vector<IfcAlignment>();
             auto geomLoader = manager->GetGeometryProcessor(modelID);
             auto type = webifc::schema::IFCALIGNMENT;
 
             auto elements = manager->GetIfcLoader(modelID)->GetExpressIDsWithType(type);
 
-            std::vector<webifc::geometry::IfcAlignment> alignments;
+            std::vector<IfcAlignment> alignments;
 
             for (size_t i = 0; i < elements.size(); i++)
             {
-                webifc::geometry::IfcAlignment alignment = geomLoader->GetLoader().GetAlignment(elements[i]);
+                IfcAlignment alignment = geomLoader->GetLoader().GetAlignment(elements[i]);
                 alignment.transform(geomLoader->GetCoordinationMatrix());
                 alignments.push_back(alignment);
             }
 
             return alignments;
-        }
-
-        void SetGeometryTransformation(uint32_t modelID, std::array<double, 16> m)
-        {
-            if (manager->IsModelOpen(modelID))
-                manager->GetGeometryProcessor(modelID)->SetTransformation(m);
         }
 
         std::array<double, 16> GetCoordinationMatrix(uint32_t modelID)
@@ -188,34 +311,9 @@ namespace  WebIfcClrWrapper
                 ? manager->GetGeometryProcessor(modelID)->GetFlatCoordinationMatrix()
                 : std::array<double, 16>();
         }
-
-        std::vector<uint32_t> GetExpressIDs(uint32_t modelID, uint32_t type)
-        {
-            if (!manager->IsModelOpen(modelID)) return {};
-            auto loader = manager->GetIfcLoader(modelID);
-            return loader->GetExpressIDsWithType(type);
-        }
-
-
-        bool ValidateExpressID(uint32_t modelID, uint32_t expressId) {
-            return manager->IsModelOpen(modelID)
-                && manager->GetIfcLoader(modelID)->IsValidExpressID(expressId);
-        }
-
-        uint32_t GetNextExpressID(uint32_t modelID, uint32_t expressId) {
-            return manager->IsModelOpen(modelID) 
-                ? manager->GetIfcLoader(modelID)->GetNextExpressID(expressId) 
-                : 0;
-        }
-
-        void GetAllLines(uint32_t modelID, List<uint32_t>^ list) {
-            auto lines = manager->GetIfcLoader(modelID)->GetAllLines();
-            for (auto line : lines)
-                list->Add(line);
-        }
-
-        std::string GetNameFromTypeCode(uint32_t type) {
-            return std::string(manager->GetSchemaManager().IfcTypeCodeToType(type));
+               
+        System::String^ GetNameFromTypeCode(uint32_t type) {
+            return marshal_as<System::String^>(manager->GetSchemaManager().IfcTypeCodeToType(type));
         }
 
         uint32_t GetTypeCodeFromName(std::string typeName) {
@@ -226,9 +324,9 @@ namespace  WebIfcClrWrapper
             return manager->GetSchemaManager().IsIfcElement(type);
         }
 
+        /*
         void ReadValue(uint32_t modelID, webifc::parsing::IfcTokenType t)
         {
-            /*
             // TODO: finish 
             auto loader = manager->GetIfcLoader(modelID);
             switch (t)
@@ -261,15 +359,15 @@ namespace  WebIfcClrWrapper
                 // use undefined to signal val parse issue
                 //return emscripten::val::undefined();
             }
-            */
         }
+            */
 
-        void GetArgs(uint32_t modelID)
+        /*
+    void GetArgs(uint32_t modelID)
         {
             bool inObject = false; 
             bool inList = false;
             
-            /*
             auto loader = manager->GetIfcLoader(modelID);
             auto arguments = emscripten::val::array();
             size_t size = 0;
@@ -339,9 +437,10 @@ namespace  WebIfcClrWrapper
             if (size == 0 && !inList) return emscripten::val::null();
             if (size == 1 && inObject) return arguments[0];
             return arguments;
-            */
         }
+        */
 
+        /*
         void GetLine(uint32_t modelID, uint32_t expressID)
         {
             auto loader = manager->GetIfcLoader(modelID);
@@ -352,27 +451,14 @@ namespace  WebIfcClrWrapper
 
             // TODO: convert to a struct
 
-            /*
             auto retVal = emscripten::val::object();
             retVal.set(emscripten::val("ID"), expressID);
             retVal.set(emscripten::val("type"), lineType);
             retVal.set(emscripten::val("arguments"), arguments);
             return retVal;
-            */
         }
-
-        uint32_t GetLineType(uint32_t modelID, uint32_t expressID) {
-            return manager->IsModelOpen(modelID) ? manager->GetIfcLoader(modelID)->GetLineType(expressID) : 0;
-        }
-
-        uint32_t GetMaxExpressID(uint32_t modelID) {
-            return manager->IsModelOpen(modelID) ? manager->GetIfcLoader(modelID)->GetMaxExpressId() : 0;
-        }
-
-        bool IsModelOpen(uint32_t modelID) {
-            return manager->IsModelOpen(modelID);
-        }
-
+        */
+          
 
         /**
              * Gets the ifc line data for a given express ID
