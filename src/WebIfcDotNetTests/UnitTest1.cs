@@ -4,10 +4,55 @@ namespace WebIfcDotNetTests
 {
     public class Tests
     {
-        
+        public static string OutputFolder = "C:\\Users\\cdigg\\git\\3d-format-shootout\\data\\local-untracked";
+
+        public static unsafe void OutputObj(TransformedMesh tm)
+        {
+            var id = tm.Mesh.GetExpressID();
+            var vertexData = tm.Mesh.GetVertexData();
+            var indexData = tm.Mesh.GetIndexData();
+            var numVerts = vertexData.Size / 6;
+            var numFaces = indexData.Size / 3;
+
+            var filePath = Path.Combine(OutputFolder, $"{id}.obj");
+
+            var vp = (double*)vertexData.DataPtr.ToPointer();
+            var fp = (int*)indexData.DataPtr.ToPointer();
+
+            var lines = new List<string>();
+            
+            for (var v = 0; v < numVerts; v++)
+            {
+                var px = vp[v * 6 + 0];
+                var py = vp[v * 6 + 1];
+                var pz = vp[v * 6 + 2];
+                lines.Add($"v {px} {py} {pz}");
+            }
+
+            /*
+             // NOTE: this would be required if we wanted to add explicit normals 
+            for (var v = 0; v < numVerts; v++)
+            {
+                var nx = vp[v * 6 + 3];
+                var ny = vp[v * 6 + 4];
+                var nz = vp[v * 6 + 5];
+                lines.Add($"vn {nx} {ny} {nz}");
+            }
+            */
+
+            for (var f = 0; f < numFaces; f++)
+            {
+                var a = fp[f * 3 + 0] + 1;
+                var b = fp[f * 3 + 1] + 1;
+                var c = fp[f * 3 + 2] + 1;
+                lines.Add($"f {a} {b} {c}");
+            }
+
+            File.WriteAllLines(filePath, lines);
+        }
 
         [Test]
-        public void Test2()
+        public void MainTest()
         {
             var api = new DotNetApi();
 
@@ -18,14 +63,12 @@ namespace WebIfcDotNetTests
             var lines = model.GetAllLines();
             Console.WriteLine($"Found {lines.Count} lines");
 
-            /*
-            for (var i = 0; i < lines.Count && i < 100; i++)
+            /* for (var i = 0; i < lines.Count && i < 100; i++)
             {
                 var lt = model.GetLineType((uint)lines[i]);
                 var name = api.GetNameFromTypeCode(lt);
                 Console.WriteLine($"Line {i}, id = {lines[i]}, type = {lt}, name = {name}");
-            }
-            */
+            } */
 
             var meshLists = model.GetMeshes();
             foreach (var meshList in meshLists)
@@ -38,13 +81,14 @@ namespace WebIfcDotNetTests
 
                 Console.WriteLine($"MeshList: {meshList.ExpressID}, {typeName}, # meshes = {meshList.Meshes.Count}");
 
-                foreach (var mesh in meshList.Meshes)
+                foreach (var transformedMesh in meshList.Meshes)
                 {
-                    var vertexData = mesh.Mesh.GetVertexData();
-                    var indexData = mesh.Mesh.GetIndexData();
-                    var numVerts = vertexData.Size / vertexData.ElementSize / 6;
-                    var numFaces = indexData.Size / indexData.ElementSize / 3;
-                    var meshId = mesh.Mesh.GetExpressID();
+                    var mesh = transformedMesh.Mesh;
+                    var vertexData = mesh.GetVertexData();
+                    var indexData = mesh.GetIndexData();
+                    var numVerts = vertexData.Size / 6;
+                    var numFaces = indexData.Size / 3;
+                    var meshId = mesh.GetExpressID();
                     var meshType = model.GetLineType(meshId);
                     var meshTypeName = api.GetNameFromTypeCode(meshType);
                     Console.WriteLine($"  Mesh: {meshId}, Type {meshTypeName} " +
@@ -52,6 +96,8 @@ namespace WebIfcDotNetTests
                                   $"Vertex data size {vertexData.Size}, " +
                                   $"# faces {numFaces}, " +
                                   $"Index size {indexData.Size}");
+
+                    OutputObj(transformedMesh);
                 }
             }
         }
