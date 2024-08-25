@@ -1,3 +1,5 @@
+using Ara3D.Logging;
+using Ara3D.Utils;
 using WebIfcClrWrapper;
 
 namespace WebIfcDotNetTests
@@ -49,6 +51,22 @@ namespace WebIfcDotNetTests
             }
 
             File.WriteAllLines(filePath, lines);
+        }
+
+        public static IEnumerable<FilePath> InputFiles
+            => new DirectoryPath(@"C:\Users\cdigg\dev\speckle\private-test-files").GetFiles();
+
+        [Test]
+        [TestCaseSource(nameof(InputFiles))]
+        public void AllFilesTest(FilePath f)
+        {
+            var api = new DotNetApi();
+            var logger = new Logger(LogWriter.ConsoleWriter, "");
+            logger.Log($"Opening file {f}");
+            var model = api.Load(f);
+            logger.Log($"Finished loading model {model.Id}");
+            var meshLists = model.GetMeshes();
+            logger.Log($"Found {meshLists.Count} mesh lists");
         }
 
         [Test]
