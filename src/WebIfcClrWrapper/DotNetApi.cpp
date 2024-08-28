@@ -82,7 +82,7 @@ namespace  WebIfcClrWrapper
     public ref class LineData
     {
     public:
-        int32_t ExpressId = 0;
+        uint32_t ExpressId = 0;
         String^ Type = nullptr;
         List<Object^>^ Arguments = gcnew List<Object^>(0);
     };

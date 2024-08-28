@@ -1,4 +1,5 @@
 using System.Collections;
+using System.IO.Compression;
 using System.Text;
 using Ara3D.Logging;
 using Ara3D.Utils;
@@ -6,9 +7,24 @@ using WebIfcClrWrapper;
 
 namespace WebIfcDotNetTests
 {
-    public class Tests
+
+
+    public class MainTests
     {
         public static string OutputFolder = "C:\\Users\\cdigg\\git\\3d-format-shootout\\data\\local-untracked";
+
+        public IEnumerable<LineData> GetLines(Model model, string name)
+        {
+            foreach (var lineId in model.GetLineIds())
+            {
+                var type = model.GetLineType(lineId);
+                var typeName = DotNetApi.GetNameFromTypeCode(type);
+                if (typeName.Equals(name, StringComparison.OrdinalIgnoreCase))
+                {
+                    yield return model.GetLineData(lineId);
+                }
+            }
+        }
 
         public static unsafe void OutputObj(TransformedMesh tm)
         {
@@ -24,7 +40,7 @@ namespace WebIfcDotNetTests
             var fp = (int*)indexData.DataPtr.ToPointer();
 
             var lines = new List<string>();
-            
+
             for (var v = 0; v < numVerts; v++)
             {
                 var px = vp[v * 6 + 0];
@@ -34,7 +50,7 @@ namespace WebIfcDotNetTests
             }
 
             /*
-             // NOTE: this would be required if we wanted to add explicit normals 
+             // NOTE: this would be required if we wanted to add explicit normals
             for (var v = 0; v < numVerts; v++)
             {
                 var nx = vp[v * 6 + 3];
@@ -80,7 +96,7 @@ namespace WebIfcDotNetTests
             var api = new DotNetApi();
             var logger = new Logger(LogWriter.ConsoleWriter, "");
             logger.Log($"Opening file {f}");
-            
+
             var model = api.Load(f);
             logger.Log($"Finished loading model {model.Id}");
 
@@ -97,7 +113,8 @@ namespace WebIfcDotNetTests
         public static void TestLines()
         {
             var api = new DotNetApi();
-            var model = api.Load("C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc");
+            var model = api.Load(
+                "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc");
 
             Console.WriteLine($"Id = {model.Id}, Size = {model.Size()}");
             var lineIds = model.GetLineIds();
@@ -106,8 +123,7 @@ namespace WebIfcDotNetTests
             {
                 try
                 {
-                    var line = model.GetLineData((uint)id);
-                    //Console.WriteLine($"{i}: {id} = Pass");
+                    var line = model.GetLineData(id);
                     Console.WriteLine($"{i}: {id} = {IfcValToString(line)}");
                 }
                 catch (Exception e)
@@ -118,10 +134,7 @@ namespace WebIfcDotNetTests
                 i++;
             }
 
-            model = null;
             api.DisposeAll();
-            api = null;
-            GC.WaitForPendingFinalizers();
         }
 
         public static string IfcValToString(object obj)
@@ -169,12 +182,13 @@ namespace WebIfcDotNetTests
         }
 
         [Test]
-            public void MainTest()
+        public void MainTest()
         {
             var api = new DotNetApi();
 
             //var model = api.Load("C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\examples\\example.ifc");
-            var model = api.Load("C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc");
+            var model = api.Load(
+                "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc");
 
             Console.WriteLine($"Id = {model.Id}, Size = {model.Size()}");
             var lines = model.GetLineIds();
@@ -209,10 +223,10 @@ namespace WebIfcDotNetTests
                     var meshType = model.GetLineType(meshId);
                     var meshTypeName = DotNetApi.GetNameFromTypeCode(meshType);
                     Console.WriteLine($"  Mesh: {meshId}, Type {meshTypeName} " +
-                                  $"# vertices {numVerts}, " +
-                                  $"Vertex data size {vertexData.Size}, " +
-                                  $"# faces {numFaces}, " +
-                                  $"Index size {indexData.Size}");
+                                      $"# vertices {numVerts}, " +
+                                      $"Vertex data size {vertexData.Size}, " +
+                                      $"# faces {numFaces}, " +
+                                      $"Index size {indexData.Size}");
 
                     OutputObj(transformedMesh);
                 }
