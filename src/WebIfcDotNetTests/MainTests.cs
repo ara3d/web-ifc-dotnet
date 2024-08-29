@@ -4,6 +4,7 @@ using System.Text;
 using Ara3D.Logging;
 using Ara3D.Utils;
 using WebIfcClrWrapper;
+using WebIfcDotNet;
 
 namespace WebIfcDotNetTests
 {
@@ -13,26 +14,15 @@ namespace WebIfcDotNetTests
     {
         public static string OutputFolder = "C:\\Users\\cdigg\\git\\3d-format-shootout\\data\\local-untracked";
 
-        public IEnumerable<LineData> GetLines(Model model, string name)
-        {
-            foreach (var lineId in model.GetLineIds())
-            {
-                var type = model.GetLineType(lineId);
-                var typeName = DotNetApi.GetNameFromTypeCode(type);
-                if (typeName.Equals(name, StringComparison.OrdinalIgnoreCase))
-                {
-                    yield return model.GetLineData(lineId);
-                }
-            }
-        }
+        
 
         public static unsafe void OutputObj(TransformedMesh tm)
         {
             var id = tm.Mesh.GetExpressId();
             var vertexData = tm.Mesh.GetVertexData();
             var indexData = tm.Mesh.GetIndexData();
-            var numVerts = vertexData.Size / 6;
-            var numFaces = indexData.Size / 3;
+            var numVerts = vertexData.Count / 6;
+            var numFaces = indexData.Count / 3;
 
             var filePath = Path.Combine(OutputFolder, $"{id}.obj");
 
@@ -124,7 +114,7 @@ namespace WebIfcDotNetTests
                 try
                 {
                     var line = model.GetLineData(id);
-                    Console.WriteLine($"{i}: {id} = {IfcValToString(line)}");
+                    Console.WriteLine($"{i}: {id} = {line.IfcValToString()}");
                 }
                 catch (Exception e)
                 {
@@ -137,49 +127,7 @@ namespace WebIfcDotNetTests
             api.DisposeAll();
         }
 
-        public static string IfcValToString(object obj)
-        {
-            switch (obj)
-            {
-                case List<object> list:
-                    return IfcValToString(list);
-                case LabelValue lv:
-                    return $"{lv.Type}{IfcValToString(lv.Arguments)}";
-                case EnumValue ev:
-                    return $".{ev.Name ?? "??"}.";
-                case RefValue rv:
-                    return $"#{rv.ExpressId}";
-                case string s:
-                    return $"\"{s}\"";
-                case null:
-                    return "$";
-                default:
-                    return obj.ToString() ?? "";
-            }
-        }
-
-        public static string IfcValToString(List<object> args)
-        {
-            var sb = new StringBuilder();
-            var first = true;
-            sb.Append('(');
-            foreach (var a in args)
-            {
-                if (!first)
-                    sb.Append(',');
-                first = false;
-                sb.Append(IfcValToString(a));
-            }
-
-            sb.Append(')');
-            return sb.ToString();
-        }
-
-        public static string IfcValToString(LineData lineData)
-        {
-            return $"#{lineData.ExpressId}={lineData.Type}({IfcValToString(lineData.Arguments)})";
-            //return $"#{lineData.ExpressId}={lineData.Type}({lineData.Arguments?.Count ?? -1})";
-        }
+            
 
         [Test]
         public void MainTest()
@@ -201,8 +149,8 @@ namespace WebIfcDotNetTests
                 Console.WriteLine($"Line {i}, id = {lines[i]}, type = {lt}, name = {name}");
             } */
 
-            var meshLists = model.GetMeshes();
-            foreach (var meshList in meshLists)
+            var geometries = model.GetGeometries();
+            foreach (var meshList in geometries)
             {
                 var lineType = model.GetLineType(meshList.ExpressId);
                 var typeName = DotNetApi.GetNameFromTypeCode(lineType);
@@ -217,16 +165,16 @@ namespace WebIfcDotNetTests
                     var mesh = transformedMesh.Mesh;
                     var vertexData = mesh.GetVertexData();
                     var indexData = mesh.GetIndexData();
-                    var numVerts = vertexData.Size / 6;
-                    var numFaces = indexData.Size / 3;
+                    var numVerts = vertexData.Count / 6;
+                    var numFaces = indexData.Count / 3;
                     var meshId = mesh.GetExpressId();
                     var meshType = model.GetLineType(meshId);
                     var meshTypeName = DotNetApi.GetNameFromTypeCode(meshType);
                     Console.WriteLine($"  Mesh: {meshId}, Type {meshTypeName} " +
                                       $"# vertices {numVerts}, " +
-                                      $"Vertex data size {vertexData.Size}, " +
+                                      $"Vertex data size {vertexData.Count}, " +
                                       $"# faces {numFaces}, " +
-                                      $"Index size {indexData.Size}");
+                                      $"Index size {indexData.Count}");
 
                     OutputObj(transformedMesh);
                 }

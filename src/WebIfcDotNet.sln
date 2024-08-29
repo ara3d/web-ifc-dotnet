@@ -17,6 +17,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ara3D.Speckle.Wpf", "..\..\
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Ara3D.Speckle.Data", "..\..\speckle-desktop\Ara3D.Speckle\Ara3D.Speckle.Data\Ara3D.Speckle.Data.csproj", "{BC471FC1-B125-4AAF-9B85-66752E68227A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebIfcDotNet", "WebIfcDotNet\WebIfcDotNet.csproj", "{0D6CC5A7-150E-4051-AD08-6AA7751756AB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -129,6 +131,30 @@ Global
 		{BC471FC1-B125-4AAF-9B85-66752E68227A}.RelWithDebInfo|x64.Build.0 = Release|Any CPU
 		{BC471FC1-B125-4AAF-9B85-66752E68227A}.RelWithDebInfo|x86.ActiveCfg = Release|Any CPU
 		{BC471FC1-B125-4AAF-9B85-66752E68227A}.RelWithDebInfo|x86.Build.0 = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Debug|x64.Build.0 = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Debug|x86.Build.0 = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.MinSizeRel|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.MinSizeRel|Any CPU.Build.0 = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.MinSizeRel|x64.ActiveCfg = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.MinSizeRel|x64.Build.0 = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.MinSizeRel|x86.ActiveCfg = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.MinSizeRel|x86.Build.0 = Debug|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Release|x64.ActiveCfg = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Release|x64.Build.0 = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Release|x86.ActiveCfg = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.Release|x86.Build.0 = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.RelWithDebInfo|Any CPU.ActiveCfg = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.RelWithDebInfo|Any CPU.Build.0 = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.RelWithDebInfo|x64.ActiveCfg = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.RelWithDebInfo|x64.Build.0 = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.RelWithDebInfo|x86.ActiveCfg = Release|Any CPU
+		{0D6CC5A7-150E-4051-AD08-6AA7751756AB}.RelWithDebInfo|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

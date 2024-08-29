@@ -48,9 +48,10 @@ namespace  WebIfcClrWrapper
 {
     // Forward declarations of classes
     ref class Model;
+    ref class DotNetApi;
 
     // Forward declaration of functions
-    Model^ CreateModel(ModelManager* manager, int modelId, IfcLoader* loader);
+    Model^ CreateModel(DotNetApi^ api, ModelManager* manager, int modelId, IfcLoader* loader);
 
     /// <summary>
     /// Wrapper for vertex or index data from a mesh. 
@@ -59,12 +60,12 @@ namespace  WebIfcClrWrapper
     public ref struct Buffer
     {
         IntPtr DataPtr;
-        int Size;
+        int Count;
         int ElementSize;
 
-        Buffer(IntPtr dataPtr, int size, int elementSize) {
+        Buffer(IntPtr dataPtr, int count, int elementSize) {
             DataPtr = dataPtr;
-            Size = size;
+            Count = count;
             ElementSize = elementSize;
         }
     };
@@ -83,6 +84,7 @@ namespace  WebIfcClrWrapper
     {
     public:
         uint32_t ExpressId = 0;
+        uint32_t TypeCode = 0;
         String^ Type = nullptr;
         List<Object^>^ Arguments = gcnew List<Object^>(0);
     };
@@ -160,15 +162,15 @@ namespace  WebIfcClrWrapper
             std::string unmanaged = marshal_as<std::string>(fileName);
             ifs.open(unmanaged, std::ifstream::in);
             loader->LoadFile(ifs);
-            return CreateModel(manager, modelId, loader);
+            return CreateModel(this, manager, modelId, loader);
         }
 
         static String^ GetNameFromTypeCode(uint32_t type) {
             return marshal_as<String^>(schemaManager->IfcTypeCodeToType(type));
         }
 
-        static uint32_t GetTypeCodeFromName(std::string typeName) {
-            return schemaManager->IfcTypeToTypeCode(typeName);
+        static uint32_t GetTypeCodeFromName(String^ typeName) {
+            return schemaManager->IfcTypeToTypeCode(marshal_as<std::string>(typeName));
         }
 
         static bool IsIfcElement(uint32_t type) {
@@ -244,7 +246,7 @@ namespace  WebIfcClrWrapper
                     case webifc::parsing::IfcTokenType::INTEGER:
                     {
                         loader->StepBack();
-                        // TEMP: this might be a "1."? 
+                        // BUG: TODO: this might be a "1." and the underlying system will fail (stol)
                         arguments->Add(loader->GetIntArgument());
                         break;
                     }
@@ -256,7 +258,7 @@ namespace  WebIfcClrWrapper
                     }
                     default:
                     {
-                        //??
+                        // TODO: right now, nothing happens. Which is fine. 
                     }
                     }
                 }
@@ -332,11 +334,11 @@ namespace  WebIfcClrWrapper
 
     /// <summary>
     /// This is a wrapper around the class in the underlying engine called an "IfcFlatMesh".
-    /// It is just a list of of Transformed Meshes with an associated express Id. 
+    /// It is a list of TransformedMeshes with an associated express Id. 
     /// It is perhaps called "flat" because it was originally a tree of references which 
     /// have been flattened into a list.
     /// </summary>
-    public ref class MeshList
+    public ref class Geometry
     {
     private:
         IfcFlatMesh* nativeFlatMesh;
@@ -345,7 +347,7 @@ namespace  WebIfcClrWrapper
 
         uint32_t ExpressId;
 
-        MeshList(IfcFlatMesh* mesh, uint32_t expressId) {
+        Geometry(IfcFlatMesh* mesh, uint32_t expressId) {
             this->nativeFlatMesh = mesh;
             this->ExpressId = expressId;
             Meshes = gcnew List<TransformedMesh^>(mesh->geometries.size());
@@ -369,9 +371,11 @@ namespace  WebIfcClrWrapper
 
     public:
 
+        DotNetApi^ Api;
+
         int Id;
 
-        Model(ModelManager* mm, int Id, IfcLoader* loader) {
+        Model(DotNetApi^ api, ModelManager* mm, int Id, IfcLoader* loader) {
             this->manager = mm;
             this->Id = Id;
             this->geometryProcessor = manager->GetGeometryProcessor(Id);
@@ -382,12 +386,12 @@ namespace  WebIfcClrWrapper
             return loader->GetTotalSize();
         }
 
-        List<MeshList^>^ GetMeshes() {   
-            auto r = gcnew List<MeshList^>(2);
+        List<Geometry^>^ GetGeometries() {   
+            auto r = gcnew List<Geometry^>(2);
 
             for (auto type : DotNetApi::schemaManager->GetIfcElementList())
             {
-                // TODO: maybe some of these elments are desired. 
+                // TODO: maybe some of these elments are desired. In fact, I think there may be explicit requests for IFCSPACE?
                 if (type == IFCOPENINGELEMENT 
                     || type == IFCSPACE 
                     || type == IFCOPENINGSTANDARDCASE)
@@ -398,7 +402,7 @@ namespace  WebIfcClrWrapper
                 for (auto e : loader->GetExpressIDsWithType(type))
                 {
                     auto flatMesh = geometryProcessor->GetFlatMesh(e);
-                    auto meshList = gcnew MeshList(&flatMesh, e);
+                    auto meshList = gcnew Geometry(&flatMesh, e);
                     for (auto& placedGeom : flatMesh.geometries)
                     {
                         auto mesh = Convert(placedGeom);
@@ -448,14 +452,16 @@ namespace  WebIfcClrWrapper
             auto lineType = GetLineType(expressId);            
            	auto lineData = gcnew LineData();
             lineData->ExpressId = expressId;
+            lineData->TypeCode = lineType;
             lineData->Type = DotNetApi::GetNameFromTypeCode(lineType);
             lineData->Arguments = DotNetApi::GetArgs(loader);
             return lineData;
         }
     };      
 
-    Model^ CreateModel(ModelManager* manager, int modelId, IfcLoader* loader)
+    // Static function implementations 
+    Model^ CreateModel(DotNetApi^ api, ModelManager* manager, int modelId, IfcLoader* loader)
     {
-        return gcnew Model(manager, modelId, loader);
+        return gcnew Model(api, manager, modelId, loader);
     }
 }

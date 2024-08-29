@@ -1,3 +1,12 @@
+using Ara3D.Logging;
+using Speckle.Core.Models;
+using Objects.Geometry;
+using Objects.Other;
+using WebIfcClrWrapper;
+using WebIfcDotNet;
+using Color = System.Drawing.Color;
+using Mesh = Objects.Geometry.Mesh;
+
 namespace WebIfcDotNetTests;
 
 public static class SpeckleTests
@@ -5,128 +14,90 @@ public static class SpeckleTests
     [Test]
     public static void SpeckleWriter()
     {
-        // VERY ODD!! Face indices have a "0" before each of them!?
+        var api = new DotNetApi();
+        var logger = new Logger(LogWriter.ConsoleWriter, "");
+        var f = "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc";
+        var g = ModelGraph.Load(api, logger, f);
+        var b = g.ToSpeckle();
+    }
 
-        // extractFaces(indices) {
-        //   const faces = []
-        //   for (let i = 0; i < indices.length; i++) {
-        //     if (i % 3 === 0) faces.push(0)
-        //     faces.push(indices[i])
-        //   }
-        //   return faces
-        // }
+    public static Base ToSpeckle(this ModelGraph g)
+    {
+        var b = new Base();
+        b["name"] = "Root";
+        AddChildren(b, g.GetSources());
+        return b;
+    }
 
-        // extractVertexData(vertexData, matrix) {
-        //   const vertices = []
-        //   const normals = []
-        //   let isNormalData = false
-        //   for (let i = 0; i < vertexData.length; i++) {
-        //     isNormalData ? normals.push(vertexData[i]) : vertices.push(vertexData[i])
-        //     if ((i + 1) % 3 === 0) isNormalData = !isNormalData
-        //   }
+    public static void AddChildren(Base b, IEnumerable<ModelNode> nodes)
+    {
+        var c = new Collection();
+        foreach (var n in nodes)
+            c.elements.Add(n.ToSpeckle());
+        if (c.elements.Count == 0)
+            return;
+        b["children"] = c;
+    }
 
-        //   // apply the transform
-        //   for (let k = 0; k < vertices.length; k += 3) {
-        //     const x = vertices[k],
-        //       y = vertices[k + 1],
-        //       z = vertices[k + 2]
-        //     vertices[k] = matrix[0] * x + matrix[4] * y + matrix[8] * z + matrix[12]
-        //     vertices[k + 1] =
-        //       (matrix[2] * x + matrix[6] * y + matrix[10] * z + matrix[14]) * -1
-        //     vertices[k + 2] = matrix[1] * x + matrix[5] * y + matrix[9] * z + matrix[13]
-        //   }
+    public static unsafe Mesh ToSpeckle(this TransformedMesh tm)
+    {
+        var r = new Mesh();
+        var vertexData = tm.Mesh.GetVertexData();
+        var indexData = tm.Mesh.GetIndexData();
+        var m = tm.Transform;
+        var vp = (double*)vertexData.DataPtr.ToPointer();
+        var ip = (int*)indexData.DataPtr.ToPointer();
+        
+        for (var i=0; i < vertexData.Count; i += 6)
+        {
+            var x = vp[i];
+            var y = vp[i + 1];
+            var z = vp[i + 2];
+            r.vertices.Add(m[0] * x + m[4] * y + m[8] * z + m[12]);
+            r.vertices.Add(-(m[2] * x + m[6] * y + m[10] * z + m[14]));
+            r.vertices.Add(m[1] * x + m[5] * y + m[9] * z + m[13]);
+        }
 
-        //   return { vertices, normals }
-        // }
+        for (var i = 0; i < indexData.Count; i += 3)
+        {
+            var a = ip[i];
+            var b = ip[i + 1];
+            var c = ip[i + 2];
+            r.faces.Add(0);
+            r.faces.Add(a);
+            r.faces.Add(b);
+            r.faces.Add(c);
+        }
 
-        // const speckleMesh = {
-        //   // eslint-disable-next-line camelcase
-        //   speckle_type: 'Objects.Geometry.Mesh',
-        //   units: 'm',
-        //   volume: 0,
-        //   area: 0,
-        //   vertices,
-        //   faces,
-        //   renderMaterial: placedGeometry.color
-        //     ? this.colorToMaterial(placedGeometry.color)
-        //     : null
-        // }
-        //
-        // geometryReferences[mesh.expressID].push({
-        //   // eslint-disable-next-line camelcase
-        //   speckle_type: 'reference',
-        //   referencedId: speckleMesh.id
-        // })
-        //
-        //await this.serverApi.saveObjectBatch(speckleMeshes)
+        var rm = new RenderMaterial();
+        rm.diffuseColor = Color.FromArgb((int)(tm.Color.A * 255), (int)(tm.Color.R * 255), (int)(tm.Color.G * 255), (int)(tm.Color.B * 255));
+        r["renderMaterial"] = rm;
+        return r;
+    }
 
-        //  async createSpatialStructure() {
-        //    const chunks = await this.getSpatialTreeChunks()
-        //    const allProjectLines = await this.ifcapi.GetLineIDsWithType(
-        //      this.modelId,
-        //      WebIFC.IFCPROJECT
-        //    )
-        //    const project = {
-        //      expressID: allProjectLines.get(0),
-        //      type: 'IFCPROJECT',
-        //      speckle_type: 'Base',
-        //      elements: []
-        //    }
-        //    await this.populateSpatialNode(project, chunks, [], 0)
-        //  }
+    public static Collection ToSpeckle(this Geometry geometry)
+    {
+        var c = new Collection();
+        foreach (var tm in geometry.Meshes ?? [])
+            c.elements.Add(tm.ToSpeckle());
+        return c;
+    }
 
+    public static Base ToSpeckle(this ModelNode n)
+    {
+        var b = new Base();
+        b["Name"] = n.Type;
+        b["ExpressId"] = n.Id;
 
-        // Spatial node magic hand wavy stuff.
-        //  async populateSpatialNode(node, chunks, closures, depth) {
-        //    depth++
-        //    this.logger.debug(`${this.spatialNodeCount++} nodes generated.`)
-        //    closures.push([])
-        //    await this.getChildren(node, chunks, PropNames.aggregates, closures, depth)
-        //    await this.getChildren(node, chunks, PropNames.spatial, closures, depth)
+        if (n.Graph.Geometries.TryGetValue(n.Id, out var m))
+        {
+            var c = m.ToSpeckle();
+            if (c.elements.Count > 0)
+                b["@displayValue"] = c;
+        }
 
-        //    node.closure = [...new Set(closures.pop())]
-
-        //    // get geometry, set displayValue
-        //    // add geometry ids to closure
-        //    if (
-        //      this.geometryReferences[node.expressID] &&
-        //      this.geometryReferences[node.expressID].length !== 0
-        //    ) {
-        //      node['@displayValue'] = this.geometryReferences[node.expressID]
-        //      node.closure.push(
-        //        ...this.geometryReferences[node.expressID].map((ref) => ref.referencedId)
-        //      )
-        //    }
-        //    // node.closureLen = node.closure.length
-        //    node.__closure = this.formatClosure(node.closure)
-        //    node.id = getHash(node)
-
-        //    // Save to db
-        //    this.objectBucket.push(node)
-        //    if (this.objectBucket.length > 3000) {
-        //      await this.flushObjectBucket()
-        //    }
-
-        //    // remove project level node closure
-        //    if (depth === 1) {
-        //      delete node.closure
-        //    }
-        //    return node.id
-        //  }
-
-
-        // const PropNames = {
-        // aggregates: {
-        //   name: WebIFC.IFCRELAGGREGATES,
-        //   relating: 'RelatingObject',
-        //   related: 'RelatedObjects',
-        //   key: 'elements'
-        // },
-        // spatial: {
-        //   name: WebIFC.IFCRELCONTAINEDINSPATIALSTRUCTURE,
-        //   relating: 'RelatingStructure',
-        //   related: 'RelatedElements',
-        //   key: 'elements'
-        // },
+        AddChildren(b, n.GetRelatedNodes());
+        
+        return b;
     }
 }
