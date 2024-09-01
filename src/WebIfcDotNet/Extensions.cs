@@ -21,6 +21,10 @@ namespace WebIfcDotNet
         public static IEnumerable<LineData> GetLines(this Model model, string name)
             => model.GetLines(DotNetApi.GetTypeCodeFromName(name.ToUpperInvariant()));
 
+        public static IEnumerable<LineData> GetLines(this Model model, params string[] names)
+            => names.Aggregate(Enumerable.Empty<LineData>(), 
+                (current, name) => current.Concat(model.GetLines(name)));
+
         public static int GetNumVertices(this Mesh mesh)
             => mesh.GetVertexData().Count / 6;
 

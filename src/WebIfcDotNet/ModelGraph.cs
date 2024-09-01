@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using Ara3D.Logging;
 using WebIfcClrWrapper;
@@ -8,18 +7,26 @@ using WebIfcClrWrapper;
 namespace WebIfcDotNet
 {
     /// <summary>
-    /// This represents the IFC model as a graph of nodes and relations.
-    /// It also contains the geometries and the property sets. 
+    /// This is a high-level representation of an IFC model as a graph of nodes and relations.
+    /// It also contains the geometries, properties, and property sets. 
+    /// Nodes and relations are created on demand. Only a subset of the file is actually converted into the ModelGraph  
     /// </summary>
     public class ModelGraph
     {
         public Model Model { get; }
 
         public Dictionary<uint, Geometry> Geometries { get; } 
+        public Dictionary<uint, ModelNode> TypeDefinitions { get; } = new Dictionary<uint, ModelNode>();
+        public Dictionary<uint, ModelNode> TypeInstanceToDefinition { get; } = new Dictionary<uint, ModelNode>();
         public Dictionary<uint, ModelNode> Nodes { get; } = new Dictionary<uint, ModelNode>();
         public Dictionary<uint, ModelRelation> Relations { get; } = new Dictionary<uint, ModelRelation>();
-        public Dictionary<uint, ModelPropSets> PropSets { get; } = new Dictionary<uint, ModelPropSets>();
-        public Dictionary<uint, List<uint>> NodeIdRelations { get; } = new Dictionary<uint, List<uint>>();
+        public Dictionary<uint, List<ModelRelation>> RelationsTo { get; } 
+        public Dictionary<uint, List<ModelRelation>> RelationsFrom { get; } 
+        public Dictionary<uint, List<ModelPropSet>> ModelNodeToPropSets { get; } = new Dictionary<uint, List<ModelPropSet>>();
+        public Dictionary<uint, List<ModelProp>> PropSetToProp { get; } = new Dictionary<uint, List<ModelProp>>();
+
+        public IReadOnlyList<uint> SourceIds { get; }
+        public IReadOnlyList<uint> SinkIds { get; }
 
         public static ModelGraph Load(DotNetApi api, ILogger logger, string f)
         {
@@ -35,7 +42,7 @@ namespace WebIfcDotNet
             logger.Log($"# line ids = {lineIds.Count}, max = {max}");
 
             var g = new ModelGraph(model);
-            logger.Log($"Created graph, # parts = {g.Nodes.Count}, # props = {g.PropSets.Count}, # of relations = {g.Relations.Count}");
+            logger.Log($"Created graph, # parts = {g.Nodes.Count}, # of relations = {g.Relations.Count}");
 
             return g;
         }
@@ -46,44 +53,104 @@ namespace WebIfcDotNet
 
             Geometries = model.GetGeometries().ToDictionary(g => g.ExpressId, g => g);
 
+            // Get all simple properties
+            // TODO: get complex properties
+            foreach (var prop in model.GetLines("IfcPropertySingleValue"))
+            {
+                if (prop.Arguments.Count != 4)
+                    throw new Exception("Expected four arguments to IfcPropertySingleValue");
+                var propName = prop.Arguments[0] as string;
+                var propVal = prop.Arguments[2];
+                var p = new ModelProp(this, prop, propName, propVal);
+                Nodes.Add(p.Id, p);
+            }
+
+            // Get all property sets
+            // TODO: get all property sets derived from "IfcPropertySet"
+            foreach (var propSet in model.GetLines("IfcPropertySet"))
+            {
+                if (propSet.Arguments.Count != 5)
+                    throw new Exception("Expected five arguments to IfcPropertySet");
+                var guid = propSet.Arguments[0] as string;
+                var name = propSet.Arguments[2] as string;
+                var models = GetOrCreateNodes(propSet, 4);
+                var props = new ModelPropSet(this, propSet, guid, name, models);
+                Nodes.Add(props.Id, props);
+            }
+
+            // Get all aggregate relations
             var relAggregates = model.GetLines("IfcRelAggregates");
             foreach (var agg in relAggregates)
             {
-                Debug.Assert(agg.Arguments.Count == 6);
+                if (agg.Arguments.Count != 6)
+                    throw new Exception("Expected 6 arguments to IfcRelAggregates");
                 var relating = GetOrCreateNode(agg, 4);
                 var related = GetOrCreateNodes(agg, 5);
-                var rel = new ModelRelation(this, agg, relating, related);
+                var rel = new ModelAggregateRelation(this, agg, relating, related);
                 Relations.Add(agg.ExpressId, rel);
             }
 
+            // Get all spatial relations
             var relContainedInSpatialStructure = model.GetLines("IfcRelContainedInSpatialStructure");
             foreach (var agg in relContainedInSpatialStructure)
             {
-                Debug.Assert(agg.Arguments.Count == 6);
+                if (agg.Arguments.Count != 6)
+                    throw new Exception("Expected 6 arguments to IfcRelContainedInSpatialStructure");
                 var related = GetOrCreateNodes(agg, 4);
                 var structure = GetOrCreateNode(agg, 5);
-                var rel = new ModelRelation(this, agg, structure, related);
+                var rel = new ModelSpatialRelation(this, agg, structure, related);
                 Relations.Add(agg.ExpressId, rel);
             }
 
-            foreach (var prop in model.GetLines("IfcPropertySet"))
+            // Get all property set relations (what things have what property sets)
+            var relPropSets = model.GetLines("IfcRelDefinesByProperties");
+            foreach (var rel in relPropSets)
             {
-                if (prop.Arguments.Count != 5)
-                    throw new Exception("Expected five arguments");
-                var guid = prop.Arguments[0] as string;
-                var name = prop.Arguments[2] as string;
-                var models = GetOrCreateNodes(prop, 4);
-                var props = new ModelPropSets(this, prop, guid, name, models);
-                PropSets.Add(props.Id, props);
+                if (rel.Arguments.Count != 6)
+                    throw new Exception("Expected six arguments to IfcRelDefinesByProperties");
+                var relObjects = GetOrCreateNodes(rel, 4);
+                var propSet = GetOrCreateNode(rel, 5);
+                
+                // Some reference nodes might be quantities, and that is a whole other kettle of fish.
+                // There are also some specialized property sets, and I am not convinced about how frequently they are used. 
+                if (!(propSet is ModelPropSet))
+                    continue;
+                var r = new ModelPropSetRelation(this, rel, propSet, relObjects);
+                Relations.Add(rel.ExpressId, r);
             }
 
+            // Get all "type" relations (what things are of what type)
+            var relDefByType = model.GetLines("IfcRelDefinesByType");
+            foreach (var rel in relDefByType)
+            {
+                if (rel.Arguments.Count != 6) 
+                    throw new Exception("Expected six arguments to IfcRelDefinesByType");
+                var relatedObjects = GetOrCreateNodes(rel, 4);
+                var relatedType = GetOrCreateNode(rel, 5);
+                var r = new ModelTypeRelation(this, rel, relatedType, relatedObjects);
+                TypeDefinitions.Add(relatedType.Id, relatedType);
+                foreach (var ro in relatedObjects)
+                    TypeInstanceToDefinition.Add(ro.Id, relatedType);
+                Relations.Add(rel.ExpressId, r);
+            }
+
+            // Associate the relations with the ids they refer to. 
+            // These are cache data structures 
+            RelationsTo = GetNodes().ToDictionary(n => n.Id, _ => new List<ModelRelation>());
+            RelationsFrom = GetNodes().ToDictionary(n => n.Id, _ => new List<ModelRelation>());
             foreach (var r in GetRelations())
             {
-                if (!NodeIdRelations.ContainsKey(r.Relating.Id))
-                    NodeIdRelations[r.Relating.Id] = new List<uint>();
-                NodeIdRelations[r.Relating.Id].AddRange(r.Related.Select(x => x.Id));
+                RelationsFrom[r.From.Id].Add(r); 
+                foreach (var related in r.To)   
+                    RelationsTo[related.Id].Add(r); 
             }
+
+            SourceIds = GetRelations().Select(r => r.From.Id).Distinct().ToList();
+            SinkIds = GetRelations().SelectMany(r => r.To.Select(x => x.Id)).Distinct().ToList();
         }
+
+        public IEnumerable<ModelNode> GetNodes()
+            => Nodes.Values;
 
         public ModelNode GetOrCreateNode(LineData lineData, int arg)
         {
@@ -125,25 +192,26 @@ namespace WebIfcDotNet
         public IEnumerable<ModelRelation> GetRelations()
             => Relations.Values;
 
-        public IEnumerable<uint> GetRelationSourceIds()
-            => GetRelations().Select(r => r.Relating.Id).Distinct();
-
-        public IEnumerable<uint> GetRelationSinkIds()
-            => GetRelations().SelectMany(r => r.Related.Select(x => x.Id)).Distinct();
-
         public IEnumerable<ModelNode> GetSources()
-            => GetRelationSourceIds().Except(GetRelationSinkIds()).Select(GetNode);
+            => SourceIds.Select(GetNode);
 
         public IEnumerable<ModelNode> GetSinks()
-            => GetRelationSinkIds().Except(GetRelationSourceIds()).Select(GetNode);
+            => SinkIds.Select(GetNode);
 
-        public IEnumerable<ModelNode> GetRelatedNodes(ModelNode node)
-            => GetRelatedNodes(node.Id);
+        public IEnumerable<ModelPropSet> GetPropSets()
+            => GetNodes().OfType<ModelPropSet>();
 
-        public IEnumerable<ModelNode> GetRelatedNodes(uint id)
-            => NodeIdRelations.ContainsKey(id) 
-                ? NodeIdRelations[id].Select(GetNode) 
-                : Enumerable.Empty<ModelNode>();
+        public IEnumerable<ModelProp> GetProps()
+            => GetNodes().OfType<ModelProp>();
+
+        public IEnumerable<ModelSpatialRelation> GetSpatialRelations()
+            => GetRelations().OfType<ModelSpatialRelation>();
+        
+        public IEnumerable<ModelAggregateRelation> GetAggregateRelations()
+            => GetRelations().OfType<ModelAggregateRelation>();
+
+        public IEnumerable<ModelNode> GetSpatialNodes()
+            => GetSpatialRelations().SelectMany(r => r.GetNodeIds()).Distinct().Select(GetNode);
     }
 
     public class ModelPart
@@ -168,33 +236,94 @@ namespace WebIfcDotNet
 
         public override int GetHashCode()
             => (int)Id;
+
+        public override string ToString()
+            => $"{Type}#{Id}";
     }
 
+    /// <summary>
+    /// Always express a 1-to-many relation
+    /// </summary>
     public class ModelRelation : ModelPart
     {
-        public ModelNode Relating { get; }
-        public IReadOnlyList<ModelNode> Related { get; }
+        public ModelNode From { get; }
+        public IReadOnlyList<ModelNode> To { get; }
 
-        public ModelRelation(ModelGraph graph, LineData lineData, ModelNode relating, List<ModelNode> related)
+        public ModelRelation(ModelGraph graph, LineData lineData, ModelNode from, List<ModelNode> to)
             : base(graph, lineData)
         {
-            Relating = relating;
-            Related = related;
+            From = from;
+            To = to;
+        }
+
+        public IEnumerable<uint> GetNodeIds()
+            => To.Select(t => t.Id).Prepend(From.Id);
+    }
+
+    public class ModelPropSetRelation : ModelRelation
+    {
+        public ModelPropSetRelation(ModelGraph graph, LineData lineData, ModelNode from, List<ModelNode> to)
+            : base(graph, lineData, from, to)
+        {
+            if (!(from is ModelPropSet))
+                throw new Exception($"Expected a ModelPropSet not {from}");
+        }
+
+        public ModelPropSet GetPropSet()
+            => (ModelPropSet)From;
+    }
+
+    public class ModelSpatialRelation : ModelRelation
+    {
+        public ModelSpatialRelation(ModelGraph graph, LineData lineData, ModelNode from, List<ModelNode> to)
+            : base(graph, lineData, from, to)
+        {
         }
     }
 
-    public class ModelPropSets : ModelPart
+    public class ModelAggregateRelation : ModelRelation
+    {
+        public ModelAggregateRelation(ModelGraph graph, LineData lineData, ModelNode from, List<ModelNode> to)
+            : base(graph, lineData, from, to)
+        {
+        }
+    }
+
+    public class ModelTypeRelation : ModelRelation
+    {
+        public ModelTypeRelation(ModelGraph graph, LineData lineData, ModelNode from, List<ModelNode> to)
+            : base(graph, lineData, from, to)
+        {
+        }
+    }
+
+    public class ModelProp : ModelNode
+    {
+        public readonly string Name;
+        public readonly object Value;
+
+        public ModelProp(ModelGraph graph, LineData lineData, string name, object value)
+            : base(graph, lineData)
+        {
+            Name = name;
+            Value = value;
+        }
+    }
+
+    public class ModelPropSet : ModelNode
     {
         public readonly string Guid;
         public readonly string Name;
-        public readonly IReadOnlyList<ModelNode> Properties;
+        public readonly IReadOnlyList<ModelProp> Properties;
 
-        public ModelPropSets(ModelGraph graph, LineData lineData, string guid, string name, List<ModelNode> properties)
+        public ModelPropSet(ModelGraph graph, LineData lineData, string guid, string name, List<ModelNode> properties)
             : base(graph, lineData)
         {
             Guid = guid;
             Name = name;
-            Properties = properties;
+            if (!properties.All(p => p is ModelProp))
+                throw new Exception("Expected all properties to be of type ModelProp");
+            Properties = properties.OfType<ModelProp>().ToList();
         }
     }
 
@@ -202,10 +331,40 @@ namespace WebIfcDotNet
     {
         public ModelNode(ModelGraph graph, LineData lineData)
             : base(graph, lineData)
-        {
-        }
+        { }
 
-        public IEnumerable<ModelNode> GetRelatedNodes()
-            => Graph.GetRelatedNodes(this);
+        public bool HasType()
+            => GetModelType() != null;
+
+        public bool IsType()
+            => Graph.TypeDefinitions.ContainsKey(Id);
+
+        public ModelNode GetModelType()
+            => Graph.TypeInstanceToDefinition.TryGetValue(Id, out var typeNode) ? typeNode : null;
+
+        public IEnumerable<ModelRelation> GetRelationsFrom()
+            => Graph.RelationsFrom[Id].Select(r => r);
+
+        public IEnumerable<ModelRelation> GetRelationsTo()
+            => Graph.RelationsTo[Id].Select(r => r);
+
+        public IEnumerable<ModelPropSet> GetPropSets()
+            => GetRelationsTo().OfType<ModelPropSetRelation>().Select(mpr => mpr.GetPropSet());
+
+        public IEnumerable<ModelNode> GetSpatiallyContained()
+            => GetRelationsFrom().OfType<ModelSpatialRelation>().SelectMany(r => r.To);
+
+        // Normally we expect only one, but it would be hard to enforce.
+        public IEnumerable<ModelNode> GetSpatialContainers()
+            => GetRelationsTo().OfType<ModelSpatialRelation>().Select(r => r.From);
+
+        public IEnumerable<ModelNode> GetAggregated()
+            => GetRelationsFrom().OfType<ModelAggregateRelation>().SelectMany(r => r.To);
+
+        public IEnumerable<ModelNode> GetAggregateContainers()
+            => GetRelationsFrom().OfType<ModelAggregateRelation>().SelectMany(r => r.To);
+
+        public IEnumerable<ModelNode> GetChildren()
+            => GetAggregated().Concat(GetSpatiallyContained());
     }
 }

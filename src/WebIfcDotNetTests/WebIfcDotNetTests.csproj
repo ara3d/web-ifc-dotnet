@@ -28,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Ara3D.Speckle.Data\Ara3D.Speckle.Data.csproj" />
     <ProjectReference Include="..\WebIfcClrWrapper\WebIfcClrWrapper.vcxproj" />
     <ProjectReference Include="..\WebIfcDotNet\WebIfcDotNet.csproj" />
   </ItemGroup>

@@ -1,103 +1,132 @@
-using Ara3D.Logging;
+﻿using Speckle.Core.Api;
+using Speckle.Core.Credentials;
+using Speckle.Core.Transports;
+using Ara3D.Speckle.Data;
+using Ara3D.Utils;
 using Speckle.Core.Models;
-using Objects.Geometry;
-using Objects.Other;
-using WebIfcClrWrapper;
-using WebIfcDotNet;
-using Color = System.Drawing.Color;
-using Mesh = Objects.Geometry.Mesh;
 
-namespace WebIfcDotNetTests;
-
-public static class SpeckleTests
+namespace WebIfcDotNetTests
 {
-    [Test]
-    public static void SpeckleWriter()
+   
+    public static class SpeckleTests
     {
-        var api = new DotNetApi();
-        var logger = new Logger(LogWriter.ConsoleWriter, "");
-        var f = "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc";
-        var g = ModelGraph.Load(api, logger, f);
-        var b = g.ToSpeckle();
-    }
-
-    public static Base ToSpeckle(this ModelGraph g)
-    {
-        var b = new Base();
-        b["name"] = "Root";
-        AddChildren(b, g.GetSources());
-        return b;
-    }
-
-    public static void AddChildren(Base b, IEnumerable<ModelNode> nodes)
-    {
-        var c = new Collection();
-        foreach (var n in nodes)
-            c.elements.Add(n.ToSpeckle());
-        if (c.elements.Count == 0)
-            return;
-        b["children"] = c;
-    }
-
-    public static unsafe Mesh ToSpeckle(this TransformedMesh tm)
-    {
-        var r = new Mesh();
-        var vertexData = tm.Mesh.GetVertexData();
-        var indexData = tm.Mesh.GetIndexData();
-        var m = tm.Transform;
-        var vp = (double*)vertexData.DataPtr.ToPointer();
-        var ip = (int*)indexData.DataPtr.ToPointer();
-        
-        for (var i=0; i < vertexData.Count; i += 6)
+        [Test]
+        public static void LoadSpeckleObject()
         {
-            var x = vp[i];
-            var y = vp[i + 1];
-            var z = vp[i + 2];
-            r.vertices.Add(m[0] * x + m[4] * y + m[8] * z + m[12]);
-            r.vertices.Add(-(m[2] * x + m[6] * y + m[10] * z + m[14]));
-            r.vertices.Add(m[1] * x + m[5] * y + m[9] * z + m[13]);
+            // https://app.speckle.systems/projects/68da6db112/models/c78d273327@6e1954cfca
+
+            var accounts = AccountManager.GetAccounts();
+            foreach (var account in accounts)
+                Console.WriteLine($"Account: {account.serverInfo.url} {account.userInfo.email}");
+
+            Console.WriteLine($"Getting default account for this machine");
+            var defaultAccount = AccountManager.GetDefaultAccount();
+            if (defaultAccount == null)
+                throw new Exception(
+                    "Could not find a default account. You may need to install and run the Speckle Manager");
+
+            Console.WriteLine($"Authenticating with this accoutn");
+            using var client = new Client(defaultAccount);
+
+            Console.WriteLine($"Getting the main branch and retrieving a model");
+            var projectId = "68da6db112";
+            var modelId = "c78d273327";
+            var model = client.Model.Get(modelId, projectId).Result;
+            Console.WriteLine($"Retrieved model {model.name}:{model.id}");
+
+            // Create the server transport for the specified stream.
+            var transport = new ServerTransport(defaultAccount, projectId);
+            Console.WriteLine($"Created transport {transport.BaseUri}");
+
+            // Receive the object
+
+            var versionList = client.Version.GetVersions(modelId, projectId, 1).Result;
+            var firstVersion = versionList.items.FirstOrDefault()?.id;
+            if (firstVersion == null)
+                throw new Exception("No versions found for this model");
+            Console.WriteLine($"Found version {firstVersion}");
+
+            var objectId = client.Version.Get(firstVersion, modelId, projectId).Result.referencedObject;
+            Console.WriteLine($"Object ID: {objectId}");
+
+            Console.WriteLine($"Receiving object: {objectId}");
+            var root = Operations.Receive(objectId, transport).Result;
+            Console.WriteLine($"Receipt successful: {root.id}");
+
+            var converter = SpeckleConverter.Create(root).Result;
+            OutputNative(converter.Root);
+
+            // Write to a local database 
+            //var tmp = Path.GetTempPath();
+            //var localSql = new SQLiteTransport(tmp);
+            //Operations.Send(root, new[] { localSql });
         }
 
-        for (var i = 0; i < indexData.Count; i += 3)
+        public static void OutputNative(NativeObject obj, string indent = "")
         {
-            var a = ip[i];
-            var b = ip[i + 1];
-            var c = ip[i + 2];
-            r.faces.Add(0);
-            r.faces.Add(a);
-            r.faces.Add(b);
-            r.faces.Add(c);
+            Console.WriteLine($"{indent}{obj.Id}:{obj.Name}:{obj.CollectionType}:{obj.SpeckleType}:{obj.DotNetType}");
+            indent += "  ";
+            Console.WriteLine($"{indent}CHILDREN:");
+            foreach (var child in obj.Children)
+                OutputNative(child, indent + "  ");
+            Console.WriteLine($"{indent}MEMBERS:");
+            foreach (var x in obj.Members)
+                Console.WriteLine($"{indent + "  "}{x.Key}={x.Value}");
         }
 
-        var rm = new RenderMaterial();
-        rm.diffuseColor = Color.FromArgb((int)(tm.Color.A * 255), (int)(tm.Color.R * 255), (int)(tm.Color.G * 255), (int)(tm.Color.B * 255));
-        r["renderMaterial"] = rm;
-        return r;
-    }
-
-    public static Collection ToSpeckle(this Geometry geometry)
-    {
-        var c = new Collection();
-        foreach (var tm in geometry.Meshes ?? [])
-            c.elements.Add(tm.ToSpeckle());
-        return c;
-    }
-
-    public static Base ToSpeckle(this ModelNode n)
-    {
-        var b = new Base();
-        b["Name"] = n.Type;
-        b["ExpressId"] = n.Id;
-
-        if (n.Graph.Geometries.TryGetValue(n.Id, out var m))
+        [Test]
+        public static void TestLegacy()
         {
-            var c = m.ToSpeckle();
-            if (c.elements.Count > 0)
-                b["@displayValue"] = c;
+            // The id of the stream to work with (we're assuming it already exists in your default account's server)
+            //var streamId = "51d8c73c9d";
+            //var streamId = "97529188be"; 
+
+            // Advanced Revit Project 
+            var streamId = "8f64180899";
+            var branchName = "main";
+
+            // Default Speckle architecture 
+            //var streamId = "3247bdd4ee"; var branchName = "base design";
+
+            // Get default account on this machine
+            // If you don't have Speckle Manager installed download it from https://speckle-releases.netlify.app
+            var defaultAccount = AccountManager.GetDefaultAccount();
+
+            // Or get all the accounts and manually choose the one you want
+            // var accounts = AccountManager.GetAccounts();
+            // var defaultAccount = accounts.ToList().FirstOrDefault();
+
+            if (defaultAccount == null)
+                throw new Exception(
+                    "Could not find a default account. You may need to install and run the Speckle Manager");
+
+            // Authenticate using the account
+            using var client = new Client(defaultAccount);
+
+            // Get the main branch with it's latest commit reference
+            var branch = client.BranchGet(streamId, branchName, 1).Result;
+
+            // Get the id of the object referenced in the commit
+            var hash = branch.commits.items[0].referencedObject;
+
+            // Create the server transport for the specified stream.
+            var transport = new ServerTransport(defaultAccount, streamId);
+
+            // Receive the object
+            var root = Operations.Receive(hash, transport).Result;
+            Console.WriteLine("Received object:" + root.id);
+
+            var converter = SpeckleConverter.Create(root).Result;
+            OutputNative(converter.Root);
         }
 
-        AddChildren(b, n.GetRelatedNodes());
-        
-        return b;
+        public static void WriteToSqlDatabase(Base root, FilePath fp)
+        {
+            // Write to a local database 
+            var tmp = Path.GetTempPath();
+            var localSql = new SQLiteTransport(tmp);
+            Operations.Send(root, new[] { localSql });
+        }
+
     }
 }
