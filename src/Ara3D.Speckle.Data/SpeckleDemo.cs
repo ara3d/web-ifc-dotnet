@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using Speckle.Core.Api;
 using Speckle.Core.Credentials;
@@ -52,8 +53,7 @@ namespace Ara3D.Speckle.Data
                 var root = Operations.Receive(hash, transport).Result;
                 Console.WriteLine("Received object:" + root.id);
 
-                var converter = SpeckleConverter.Create(root).Result;
-                OutputNative(converter.Root);
+                OutputNative(root.ToSpeckleObject());
 
                 // Write to a local database 
                 var tmp = Path.GetTempPath();
@@ -65,10 +65,10 @@ namespace Ara3D.Speckle.Data
             Console.ReadKey();
         }
 
-        public static void OutputNative(NativeObject obj, string indent = "")
+        public static void OutputNative(SpeckleObject obj, string indent = "")
         {
-            Console.WriteLine($"{indent}{obj.Id}:{obj.Name}:{obj.CollectionType}:{obj.SpeckleType}:{obj.DotNetType}");
-            foreach (var child in obj.Children)
+            Console.WriteLine($"{indent}{obj.Id}:{obj.SpeckleType}:{obj.DotNetType}");
+            foreach (var child in obj.Elements.OfType<SpeckleObject>())
                 OutputNative(child, indent + "  ");
         }
 
@@ -79,8 +79,7 @@ namespace Ara3D.Speckle.Data
             var root = Operations.Receive("f0fa094f0c24fba78171bd57816f3797", localSql).Result;
             Console.Write($"Received {root}");
 
-            var converter = SpeckleConverter.Create(root).Result;
-            OutputNative(converter.Root); 
+            OutputNative(root.ToSpeckleObject()); 
         }
     }
 }

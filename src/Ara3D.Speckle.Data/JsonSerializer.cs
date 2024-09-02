@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.IO;
+using System.Linq;
 using Speckle.Core.Models;
 using Speckle.Newtonsoft.Json;
 
@@ -15,10 +16,41 @@ namespace Ara3D.Speckle.Data
             return jw;
         }
 
+        public static JsonWriter WriteDictionary(this JsonWriter jw, IDictionary d)
+        {
+            jw.WriteStartObject();
+            foreach (var k in d.Keys.Cast<string>().OrderBy(s => s))
+            {
+                jw.WritePropertyName(k);
+                var v = d[k];
+                jw.SafeWriteValue(v);
+            }
+            jw.WriteEndObject();
+            return jw;
+        }
+
+        public static JsonWriter WriteEnumerable(this JsonWriter jw, IEnumerable es)
+        {
+            if (es is string s)
+            {
+                jw.WriteValue(s);
+                return jw;
+            }
+            if (es is IDictionary d)
+                return jw.WriteDictionary(d);
+            jw.WriteStartArray();
+            foreach (var e in es)
+                jw.SafeWriteValue(e);
+            jw.WriteEndArray();
+            return jw;
+        }
+
         public static JsonWriter SafeWriteValue(this JsonWriter jw, object o)
         {
             if (o == null)
                 jw.WriteNull();
+            else if (o is SpeckleObject so)
+                jw.WriteSpeckleObject(so);
             else if (o is string s)
                 jw.WriteValue(s);
             else if (o is double d)
@@ -36,80 +68,49 @@ namespace Ara3D.Speckle.Data
             else if (o is bool b)
                 jw.WriteValue(b);
             else if (o is IDictionary dict)
-            {
-                jw.WriteStartObject();
-                foreach (var k in dict.Keys)
-                {
-                    jw.WritePropertyName((string)k);
-                    var v = dict[k];
-                    jw.SafeWriteValue(v);
-                }
-                jw.WriteEndObject();
-            }
+                jw.WriteDictionary(dict);
             else if (o is IEnumerable es)
-            {
-                jw.WriteStartArray();
-                foreach (var e in es)
-                    jw.SafeWriteValue(e);
-                jw.WriteEndArray();
-            }
+                jw.WriteEnumerable(es); 
             else if (o is Base speckleBase)
-            {
                 jw.WriteValue($"Speckle${speckleBase.id}");
-            }
             else
                 jw.WriteValue(o.ToString());
             return jw;
         }
 
-        public static string ToJson(this NativeObject nativeObject)
+        public static string ToJson(this SpeckleObject speckleObject)
         {
             var sw = new StringWriter();
             var jw = new JsonTextWriter(sw);
             jw.Formatting = Formatting.Indented;
             jw.Indentation = 2;
-            nativeObject.Write(jw);
+            jw.WriteSpeckleObject(speckleObject);
             return sw.ToString();
         }
 
-        public static JsonWriter Write(this NativeObject nativeObject, JsonWriter jw)
+        public static JsonWriter WriteSpeckleObject(this JsonWriter jw, SpeckleObject speckleObject)
         {
-            jw.WriteStartObject();
-            jw.WriteProperty(nativeObject, nameof(nativeObject.Id));
-            jw.WriteProperty(nativeObject, nameof(nativeObject.Name));
-            jw.WriteProperty(nativeObject, nameof(nativeObject.CollectionType));
-            jw.WriteProperty(nativeObject, nameof(nativeObject.SpeckleType));
-            jw.WriteProperty(nativeObject, nameof(nativeObject.DotNetType));
-            jw.WriteProperty(nativeObject, nameof(nativeObject.BasePoint));
-            jw.WriteProperty(nativeObject, nameof(nativeObject.IsInstanced));
-            jw.WriteProperty(nativeObject, nameof(nativeObject.InstanceDefinitionId));
-            jw.WritePropertyName("children");
-            jw.WriteStartArray();
-            foreach (var c in nativeObject.Children)
-                jw = Write(c, jw);
-            jw.WriteEndArray();
-
-            jw.WritePropertyName("members");
-            jw.WriteStartObject();
-
-            if (nativeObject.SpeckleType == "Objects.Geometry.Mesh")
+            if (speckleObject == null)
             {
-                // NOTE: we skip the members, because they are VERY long. 
-                // Maybe, we could just skip 'detachable' members. 
-                // Note: some detachable members, don't have the '@' symbol in front of them which is inconsistent. 
-            }
-            else
-            {
-                foreach (var member in nativeObject.Members)
-                {
-                    jw.WritePropertyName(member.Key);
-                    jw.SafeWriteValue(member.Value);
-                }
+                jw.WriteNull();
+                return jw;
             }
 
+            if (speckleObject.IsSimpleList)
+                return jw.WriteEnumerable(speckleObject.Elements);
+
+            if (speckleObject.IsSimpleDictionary)
+                return jw.WriteDictionary(speckleObject.Properties);
+
+            jw.WriteStartObject();
+            jw.WriteProperty(speckleObject, nameof(speckleObject.Id));
+            jw.WriteProperty(speckleObject, nameof(speckleObject.SpeckleType));
+            jw.WriteProperty(speckleObject, nameof(speckleObject.DotNetType));
+            jw.WriteProperty(speckleObject, nameof(speckleObject.Elements));
+            if (speckleObject.SpeckleType != "Objects.Geometry.Mesh")
+                jw.WriteProperty(speckleObject, nameof(speckleObject.Properties));
             jw.WriteEndObject();
 
-            jw.WriteEndObject();
             return jw;
         }
     }

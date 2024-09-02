@@ -9,33 +9,15 @@ using Mesh = Objects.Geometry.Mesh;
 
 namespace WebIfcDotNetTests;
 
-public static class SpeckleWriter
+public static class IfcModelGraphToSpeckle
 {
-    [Test]
-    public static void ConvertToSpeckle()
-    {
-        var api = new DotNetApi();
-        var logger = new Logger(LogWriter.ConsoleWriter, "");
-        var f = "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc";
-        var g = ModelGraph.Load(api, logger, f);
-        var b = g.ToSpeckle();
-    }
-
     public static Base ToSpeckle(this ModelGraph g)
     {
         var b = new Base();
-        AddChildren(b, g.GetSources());
+        b["Name"] = "Root";
+        var children = g.GetSources().Select(ToSpeckle).ToList();
+        b["elements"] = children;
         return b;
-    }
-
-    public static void AddChildren(Base b, IEnumerable<ModelNode> nodes)
-    {
-        var c = new Collection();
-        foreach (var n in nodes)
-            c.elements.Add(n.ToSpeckle());
-        if (c.elements.Count == 0)
-            return;
-        b["children"] = c;
     }
 
     public static unsafe Mesh ToSpeckle(this TransformedMesh tm)
@@ -82,6 +64,37 @@ public static class SpeckleWriter
         return c;
     }
 
+    public static object IfcValJsonObject(this object obj)
+    {
+        switch (obj)
+        {
+            case List<object> list:
+                return list.Select(IfcValJsonObject).ToList();
+            case LabelValue lv:
+                return IfcValJsonObject(lv.Arguments.Count == 1 
+                    ? lv.Arguments[0] 
+                    : lv.Arguments);
+            case EnumValue ev:
+                return ev.Name;
+            case RefValue rv:
+                return rv.ExpressId;
+            case string s:
+                return s;
+            case null:
+                return null;
+            default:
+                return obj.ToString() ?? "";
+        }
+    }
+
+    public static Dictionary<string, object> ToSpeckleDictionary(this ModelPropSet ps)
+    {
+        var d = new Dictionary<string, object>();
+        foreach (var p in ps.Properties)
+            d[p.Name] = p.Value.IfcValJsonObject();
+        return d;
+    }
+
     public static Base ToSpeckle(this ModelNode n)
     {
         var b = new Base();
@@ -94,7 +107,7 @@ public static class SpeckleWriter
         b["type"] = n.Type;
         b["expressID"] = n.Id;
 
-        /* TODO: this is temporarily disabled. 
+        /* TODO: Add geometries and '@displayValue' properties. 
         if (n.Graph.Geometries.TryGetValue(n.Id, out var m))
         {
             var c = m.ToSpeckle();
@@ -103,9 +116,12 @@ public static class SpeckleWriter
         }
         */
 
-        // NOTE: there are too many children included! 
-        AddChildren(b, n.GetChildren());
-        
+        var children = n.GetChildren().Select(ToSpeckle).ToList();
+        b["elements"] = children;
+
+        foreach (var p in n.GetPropSets())
+            b[p.Name] = p.ToSpeckleDictionary();
+
         return b;
     }
 }

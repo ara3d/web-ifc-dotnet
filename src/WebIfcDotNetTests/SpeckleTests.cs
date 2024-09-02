@@ -14,7 +14,7 @@ namespace WebIfcDotNetTests
     public static class SpeckleTests
     {
         [Test]
-        public static void LoadSpeckleObject()
+        public static void LoadSpeckleObjectToJson()
         {
             // https://app.speckle.systems/projects/68da6db112/models/c78d273327@6e1954cfca
 
@@ -56,75 +56,13 @@ namespace WebIfcDotNetTests
             var baseRoot = Operations.Receive(objectId, transport).Result;
             Console.WriteLine($"Receipt successful: {baseRoot.id}");
 
-            var converter = SpeckleConverter.Create(baseRoot).Result;
-            var convertedRoot = converter.Root;
+            var convertedRoot = baseRoot.ToSpeckleObject();
 
             var tmp = PathUtil.CreateTempFile("json");
             var json = convertedRoot.ToJson();
             tmp.WriteAllText(json);
             Console.WriteLine($"Wrote json to: {tmp}");
             ProcessUtil.OpenFile(tmp);
-
-            // NOTE: this was an old way to output the data to console without converting to JSON 
-            //OutputNative(convertedRoot);
-        }
-
-        public static void OutputNative(NativeObject obj, string indent = "")
-        {
-            Console.WriteLine($"{indent}{obj.Id}:{obj.Name}:{obj.CollectionType}:{obj.SpeckleType}:{obj.DotNetType}");
-            indent += "  ";
-            Console.WriteLine($"{indent}CHILDREN:");
-            foreach (var child in obj.Children)
-                OutputNative(child, indent + "  ");
-            Console.WriteLine($"{indent}MEMBERS:");
-            foreach (var x in obj.Members)
-                Console.WriteLine($"{indent + "  "}{x.Key}={x.Value}");
-        }
-
-        [Test]
-        public static void LoadSpeckleObject_Deprecated()
-        {
-            // The id of the stream to work with (we're assuming it already exists in your default account's server)
-            //var streamId = "51d8c73c9d";
-            //var streamId = "97529188be"; 
-
-            // Advanced Revit Project 
-            var streamId = "8f64180899";
-            var branchName = "main";
-
-            // Default Speckle architecture 
-            //var streamId = "3247bdd4ee"; var branchName = "base design";
-
-            // Get default account on this machine
-            // If you don't have Speckle Manager installed download it from https://speckle-releases.netlify.app
-            var defaultAccount = AccountManager.GetDefaultAccount();
-
-            // Or get all the accounts and manually choose the one you want
-            // var accounts = AccountManager.GetAccounts();
-            // var defaultAccount = accounts.ToList().FirstOrDefault();
-
-            if (defaultAccount == null)
-                throw new Exception(
-                    "Could not find a default account. You may need to install and run the Speckle Manager");
-
-            // Authenticate using the account
-            using var client = new Client(defaultAccount);
-
-            // Get the main branch with it's latest commit reference
-            var branch = client.BranchGet(streamId, branchName, 1).Result;
-
-            // Get the id of the object referenced in the commit
-            var hash = branch.commits.items[0].referencedObject;
-
-            // Create the server transport for the specified stream.
-            var transport = new ServerTransport(defaultAccount, streamId);
-
-            // Receive the object
-            var root = Operations.Receive(hash, transport).Result;
-            Console.WriteLine("Received object:" + root.id);
-
-            var converter = SpeckleConverter.Create(root).Result;
-            OutputNative(converter.Root);
         }
 
         public static void WriteToSqlDatabase(Base root, FilePath fp)
@@ -149,8 +87,7 @@ namespace WebIfcDotNetTests
             var f = "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc";
             var b = IfcFileToBase(f);
 
-            var converter = SpeckleConverter.Create(b).Result;
-            var convertedRoot = converter.Root;
+            var convertedRoot = b.ToSpeckleObject();
 
             var tmp = PathUtil.CreateTempFile("json");
             var json = convertedRoot.ToJson();
@@ -160,6 +97,6 @@ namespace WebIfcDotNetTests
         }
 
         public static string ToJson(Base speckleBase)
-            => SpeckleConverter.Create(speckleBase).Result.Root.ToJson();
+            => speckleBase.ToSpeckleObject().ToJson();
     }
 }

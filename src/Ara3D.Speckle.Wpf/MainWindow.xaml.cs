@@ -14,6 +14,7 @@ using System.Windows.Media.Media3D;
 using Ara3D.Logging;
 using Ara3D.Speckle.Data;
 using HelixToolkit.Wpf;
+using NUnit.Framework.Constraints;
 using Objects.Geometry;
 using Objects.Other;
 using Objects.Utils;
@@ -27,6 +28,7 @@ using WebIfcDotNet;
 using WebIfcDotNetTests;
 using Color = System.Windows.Media.Color;
 using Mesh = Objects.Geometry.Mesh;
+using SpeckleObject = Ara3D.Speckle.Data.SpeckleObject;
 
 namespace Ara3D.Speckle.Wpf
 {
@@ -137,19 +139,21 @@ namespace Ara3D.Speckle.Wpf
                 material.diffuseColor.B);
         }
         
-        public async Task AddMeshes(NativeObject native)
+        public async Task AddMeshes(SpeckleObject speckle)
         {
             await Application.Current.Dispatcher.BeginInvoke(async () =>
             {
                 var parentVisual = new SortingVisual3D();
                 Viewport.Children.Add(parentVisual);
-                await CreateModels(parentVisual.Children, native);
+                await CreateModels(parentVisual.Children, speckle);
             });
         }
 
-        public async Task CreateModels(Visual3DCollection parent, NativeObject native)
+        public async Task CreateModels(Visual3DCollection parent, SpeckleObject speckle)
         {
-            if (native.Base is Mesh m)
+            throw new NotImplementedException();
+            /*
+            if (speckle.Base is Mesh m)
             {
                 await Application.Current.Dispatcher.BeginInvoke(() =>
                 {
@@ -164,8 +168,9 @@ namespace Ara3D.Speckle.Wpf
                 });
             }
 
-            foreach (var child in native.Children)
+            foreach (var child in speckle.Elements)
                 await CreateModels(parent, child);
+            */
         }
 
         public Point3D GetPoint(Mesh mesh, int i)
@@ -223,21 +228,24 @@ namespace Ara3D.Speckle.Wpf
                 .WriteTo.Console()
                 .CreateLogger();
 
-            var converter = await Task.Run(() => SpeckleConverter.Create(root, logger));
+            SpeckleObject so = null;
+            var converter = await Task.Run(() => so = root.ToSpeckleObject());
 
             // Process the object however you'd like
-            await AddMeshes(converter.Root);
+            await AddMeshes(so);
         }
 
         private async void OpenIfcMenuItem_Click(object sender, RoutedEventArgs e)
         {
+            throw new NotImplementedException();
+            /*
             var api = new DotNetApi();
             var logger = new Logger(LogWriter.ConsoleWriter, "");
             var f = "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc";
             var g = ModelGraph.Load(api, logger, f);
             var b = g.ToSpeckle();
             var c = await SpeckleConverter.Create(b);
-            await AddMeshes(c.Root);
+            await AddMeshes(c.Root);*/
         }
     }
 }
