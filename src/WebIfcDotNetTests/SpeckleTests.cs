@@ -4,6 +4,9 @@ using Speckle.Core.Transports;
 using Ara3D.Speckle.Data;
 using Ara3D.Utils;
 using Speckle.Core.Models;
+using Ara3D.Logging;
+using WebIfcClrWrapper;
+using WebIfcDotNet;
 
 namespace WebIfcDotNetTests
 {
@@ -50,16 +53,20 @@ namespace WebIfcDotNetTests
             Console.WriteLine($"Object ID: {objectId}");
 
             Console.WriteLine($"Receiving object: {objectId}");
-            var root = Operations.Receive(objectId, transport).Result;
-            Console.WriteLine($"Receipt successful: {root.id}");
+            var baseRoot = Operations.Receive(objectId, transport).Result;
+            Console.WriteLine($"Receipt successful: {baseRoot.id}");
 
-            var converter = SpeckleConverter.Create(root).Result;
-            OutputNative(converter.Root);
+            var converter = SpeckleConverter.Create(baseRoot).Result;
+            var convertedRoot = converter.Root;
 
-            // Write to a local database 
-            //var tmp = Path.GetTempPath();
-            //var localSql = new SQLiteTransport(tmp);
-            //Operations.Send(root, new[] { localSql });
+            var tmp = PathUtil.CreateTempFile("json");
+            var json = convertedRoot.ToJson();
+            tmp.WriteAllText(json);
+            Console.WriteLine($"Wrote json to: {tmp}");
+            ProcessUtil.OpenFile(tmp);
+
+            // NOTE: this was an old way to output the data to console without converting to JSON 
+            //OutputNative(convertedRoot);
         }
 
         public static void OutputNative(NativeObject obj, string indent = "")
@@ -75,7 +82,7 @@ namespace WebIfcDotNetTests
         }
 
         [Test]
-        public static void TestLegacy()
+        public static void LoadSpeckleObject_Deprecated()
         {
             // The id of the stream to work with (we're assuming it already exists in your default account's server)
             //var streamId = "51d8c73c9d";
@@ -128,5 +135,31 @@ namespace WebIfcDotNetTests
             Operations.Send(root, new[] { localSql });
         }
 
+        public static Base IfcFileToBase(FilePath fp)
+        {
+            var api = new DotNetApi();
+            var logger = new Logger(LogWriter.ConsoleWriter, "");
+            var g = ModelGraph.Load(api, logger, fp);
+            return g.ToSpeckle();
+        }
+
+        [Test]
+        public static void IfcFileToSpeckleToJson()
+        {
+            var f = "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc";
+            var b = IfcFileToBase(f);
+
+            var converter = SpeckleConverter.Create(b).Result;
+            var convertedRoot = converter.Root;
+
+            var tmp = PathUtil.CreateTempFile("json");
+            var json = convertedRoot.ToJson();
+            tmp.WriteAllText(json);
+            Console.WriteLine($"Wrote json to: {tmp}");
+            ProcessUtil.OpenFile(tmp);
+        }
+
+        public static string ToJson(Base speckleBase)
+            => SpeckleConverter.Create(speckleBase).Result.Root.ToJson();
     }
 }

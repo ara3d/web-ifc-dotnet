@@ -24,7 +24,6 @@ public static class SpeckleWriter
     public static Base ToSpeckle(this ModelGraph g)
     {
         var b = new Base();
-        b["name"] = "Root";
         AddChildren(b, g.GetSources());
         return b;
     }
@@ -86,16 +85,25 @@ public static class SpeckleWriter
     public static Base ToSpeckle(this ModelNode n)
     {
         var b = new Base();
-        b["Name"] = n.Type;
-        b["ExpressId"] = n.Id;
+        if (n is ModelPropSet ps)
+        {
+            b["Name"] = ps.Name;
+            b["GlobalId"] = ps.Guid;
+        }
 
+        b["type"] = n.Type;
+        b["expressID"] = n.Id;
+
+        /* TODO: this is temporarily disabled. 
         if (n.Graph.Geometries.TryGetValue(n.Id, out var m))
         {
             var c = m.ToSpeckle();
             if (c.elements.Count > 0)
                 b["@displayValue"] = c;
         }
+        */
 
+        // NOTE: there are too many children included! 
         AddChildren(b, n.GetChildren());
         
         return b;

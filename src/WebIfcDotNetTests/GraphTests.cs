@@ -1,11 +1,13 @@
 using Ara3D.Logging;
 using System.Reflection;
+using System.Security.Cryptography.X509Certificates;
+using Ara3D.Utils;
 using Speckle.Core.Models;
 using WebIfcClrWrapper;
 using WebIfcDotNet;
 
 namespace WebIfcDotNetTests;
-
+    
 public static class GraphTests
 {
     [Test]
@@ -42,18 +44,38 @@ public static class GraphTests
         foreach (var source in sources)
             OutputNode(source, visited);
         */
-            
+
         //OutputPropSets(g);
 
+
+        Console.WriteLine("Label types");
+        foreach (var t in LabelTypes(g))
+        {
+             Console.WriteLine($"  {t}");
+        }
+
+        Console.WriteLine("Nodes");
         foreach (var n in g.GetSpatialNodes())
         {
             OutputNode(n);
         }
     }
 
+    public static IEnumerable<string> LabelTypes(ModelGraph g)
+    {
+        return g.GetNodes().OfType<ModelProp>().Select(p => p.Value).OfType<LabelValue>().Select(lv => lv.Type).Distinct().OrderBy(i => i);
+    }
+
     public static void OutputPropSet(ModelPropSet ps, string indent = "")
     {
         Console.WriteLine($"{indent}Property set: {ps.Name} has GUID {ps.Guid} and {ps.Properties.Count} props");
+        foreach (var p in ps.Properties)
+            OutputProp(p, indent + "  ");
+    }
+
+    public static void OutputProp(ModelProp p, string indent = "")
+    {
+        Console.WriteLine($"{indent}Property: {p.Name} = {p.Value.IfcValToString()}");
     }
 
     public static void OutputNode(this ModelNode n, string indent = "")

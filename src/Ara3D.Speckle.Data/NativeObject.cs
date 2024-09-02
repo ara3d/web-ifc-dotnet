@@ -16,6 +16,7 @@ namespace Ara3D.Speckle.Data
         public Base Base { get; set; }
         public Dictionary<string, object> Members { get; set; } = new Dictionary<string, object>();
         public NativeObject InstanceDefinition { get; set; }
+        public string InstanceDefinitionId => InstanceDefinition?.Id ?? "";
         public List<NativeObject> Children { get; } = new List<NativeObject>();
         public List<NativeObject> Instances { get; set; } = new List<NativeObject>();
         public Point BasePoint { get; set; }
