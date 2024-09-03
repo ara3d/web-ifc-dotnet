@@ -147,6 +147,11 @@ namespace  WebIfcClrWrapper
         {
             delete settings;
             delete manager;
+        }
+
+        void DisposeStatic()
+        {
+            DisposeAll();
             delete schemaManager;
         }
 
@@ -371,6 +376,7 @@ namespace  WebIfcClrWrapper
         ModelManager* manager;
         IfcLoader* loader;
         IfcGeometryProcessor* geometryProcessor;        
+        List<Geometry^>^ geometries;
 
     public:
 
@@ -389,7 +395,14 @@ namespace  WebIfcClrWrapper
             return loader->GetTotalSize();
         }
 
-        List<Geometry^>^ GetGeometries() {   
+        List<Geometry^>^ GetGeometries() {
+            if (geometries == nullptr) {
+                geometries = LoadGeometries();
+            }
+            return geometries;
+        }
+
+        List<Geometry^>^ LoadGeometries() {   
             auto r = gcnew List<Geometry^>(2);
 
             for (auto type : DotNetApi::schemaManager->GetIfcElementList())

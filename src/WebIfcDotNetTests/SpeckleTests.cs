@@ -10,7 +10,6 @@ using WebIfcDotNet;
 
 namespace WebIfcDotNetTests
 {
-   
     public static class SpeckleTests
     {
         [Test]

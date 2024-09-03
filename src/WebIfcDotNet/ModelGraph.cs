@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Ara3D.Logging;
 using WebIfcClrWrapper;
@@ -46,21 +47,73 @@ namespace WebIfcDotNet
 
             return g;
         }
-
+        
         public ModelGraph(Model model)
         {
             Model = model;
 
-            Geometries = model.GetGeometries().ToDictionary(g => g.ExpressId, g => g);
+            var geos = model.GetGeometries();
+            Geometries = new Dictionary<uint, Geometry>();
+            var nDuplicate = 0;
+            foreach (var g in geos)
+            {
+                if (Geometries.ContainsKey(g.ExpressId))
+                    nDuplicate++;
+                Geometries[g.ExpressId] = g;
+            }
+            if (nDuplicate != 0)
+                Debug.Write($"Found {nDuplicate} duplicate geometry IDs");
 
-            // Get all simple properties
-            // TODO: get complex properties
             foreach (var prop in model.GetLines("IfcPropertySingleValue"))
             {
+                // https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/FINAL/HTML/ifcpropertyresource/lexical/ifcpropertysinglevalue.htm
                 if (prop.Arguments.Count != 4)
                     throw new Exception("Expected four arguments to IfcPropertySingleValue");
                 var propName = prop.Arguments[0] as string;
                 var propVal = prop.Arguments[2];
+                var p = new ModelProp(this, prop, propName, propVal);
+                Nodes.Add(p.Id, p);
+            }
+            foreach (var prop in model.GetLines("IfcPropertyEnumeratedValue"))
+            {
+                // https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/FINAL/HTML/ifcpropertyresource/lexical/ifcpropertyenumeratedvalue.htm
+                if (prop.Arguments.Count != 4)
+                    throw new Exception("Expected four arguments to IfcPropertyEnumeratedValue");
+                var propName = prop.Arguments[0] as string;
+                var propVal = prop.Arguments[2];
+                var p = new ModelProp(this, prop, propName, propVal);
+                Nodes.Add(p.Id, p);
+            }
+            foreach (var prop in model.GetLines("IfcPropertyReferenceValue"))
+            {
+                // https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/FINAL/HTML/ifcpropertyresource/lexical/ifcpropertyreferencevalue.htm
+                if (prop.Arguments.Count != 5)
+                    throw new Exception("Expected five arguments to IfcPropertyReferenceValue");
+                var propName = prop.Arguments[0] as string;
+                var propVal = prop.Arguments[3];
+                // NOTE: Not sure what a "IfcObjectReferenceSelect" is
+                var p = new ModelProp(this, prop, propName, propVal);
+                Nodes.Add(p.Id, p);
+            }
+            foreach (var prop in model.GetLines("IfcPropertyListValue"))
+            {
+                // https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/FINAL/HTML/ifcpropertyresource/lexical/ifcpropertylistvalue.htm
+                if (prop.Arguments.Count != 4)
+                    throw new Exception("Expected four arguments to IfcPropertyListValue");
+                var propName = prop.Arguments[0] as string;
+                var propVal = prop.Arguments[2];
+                // NOTE: not handling units
+                var p = new ModelProp(this, prop, propName, propVal);
+                Nodes.Add(p.Id, p);
+            }
+            foreach (var prop in model.GetLines("IfcComplexProperty"))
+            {
+                // https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/FINAL/HTML/ifcpropertyresource/lexical/ifccomplexproperty.htm
+                if (prop.Arguments.Count != 4)
+                    throw new Exception("Expected four arguments to IfcComplexProperty");
+                var propName = prop.Arguments[0] as string;
+                var propVal = prop.Arguments[3];
+                // NOTE: not handling the usage name 
                 var p = new ModelProp(this, prop, propName, propVal);
                 Nodes.Add(p.Id, p);
             }
@@ -305,7 +358,7 @@ namespace WebIfcDotNet
         public ModelProp(ModelGraph graph, LineData lineData, string name, object value)
             : base(graph, lineData)
         {
-            Name = name;
+            Name = name;            
             Value = value;
         }
     }
