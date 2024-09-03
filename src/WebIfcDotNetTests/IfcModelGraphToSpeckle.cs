@@ -83,7 +83,7 @@ public static class IfcModelGraphToSpeckle
             case null:
                 return null;
             default:
-                return obj.ToString() ?? "";
+                return obj;
         }
     }
 

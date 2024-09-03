@@ -34,6 +34,7 @@
 
 #pragma managed 
 
+#include <codecvt>
 #include <msclr\marshal_cppstd.h>
 
 using namespace System;
@@ -52,6 +53,7 @@ namespace  WebIfcClrWrapper
 
     // Forward declaration of functions
     Model^ CreateModel(DotNetApi^ api, ModelManager* manager, int modelId, IfcLoader* loader);
+    String^ MarshalString(const std::string& s);
 
     /// <summary>
     /// Wrapper for vertex or index data from a mesh. 
@@ -159,6 +161,7 @@ namespace  WebIfcClrWrapper
             auto modelId = manager->CreateModel(*settings);
             auto loader = manager->GetIfcLoader(modelId);
             std::ifstream ifs;
+            // NOTE: may fail if the file has unicode characters. This needs to be tested  
             std::string unmanaged = marshal_as<std::string>(fileName);
             ifs.open(unmanaged, std::ifstream::in);
             loader->LoadFile(ifs);
@@ -166,7 +169,7 @@ namespace  WebIfcClrWrapper
         }
 
         static String^ GetNameFromTypeCode(uint32_t type) {
-            return marshal_as<String^>(schemaManager->IfcTypeCodeToType(type));
+            return MarshalString(schemaManager->IfcTypeCodeToType(type));
         }
 
         static uint32_t GetTypeCodeFromName(String^ typeName) {
@@ -220,7 +223,7 @@ namespace  WebIfcClrWrapper
                     case webifc::parsing::IfcTokenType::LABEL:
                     {
                         loader->StepBack();
-                        auto s = marshal_as<String^>(std::string(loader->GetStringArgument()));
+                        auto s = MarshalString(std::string(loader->GetStringArgument()));
                         loader->GetTokenType();
                         arguments->Add(gcnew LabelValue(s, GetArgs(loader, true)));
                         break;
@@ -228,13 +231,13 @@ namespace  WebIfcClrWrapper
                     case webifc::parsing::IfcTokenType::STRING:
                     {
                         loader->StepBack();
-                        arguments->Add(marshal_as<String^>(loader->GetDecodedStringArgument()));
+                        arguments->Add(MarshalString(loader->GetDecodedStringArgument()));
                         break;
                     }
                     case webifc::parsing::IfcTokenType::ENUM:
                     {
                         loader->StepBack();
-                        arguments->Add(gcnew EnumValue(marshal_as<String^>(std::string(loader->GetStringArgument()))));
+                        arguments->Add(gcnew EnumValue(MarshalString(std::string(loader->GetStringArgument()))));
                         break;
                     }
                     case webifc::parsing::IfcTokenType::REAL:
@@ -463,5 +466,14 @@ namespace  WebIfcClrWrapper
     Model^ CreateModel(DotNetApi^ api, ModelManager* manager, int modelId, IfcLoader* loader)
     {
         return gcnew Model(api, manager, modelId, loader);
+    }
+
+    String^ MarshalString(const std::string& s)
+    {
+        // Convert UTF - 8 std::string to std::wstring
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+        std::wstring wideString = converter.from_bytes(s);
+        // Convert std::wstring to System::String^
+        return msclr::interop::marshal_as<String^>(wideString);
     }
 }
