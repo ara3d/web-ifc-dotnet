@@ -47,7 +47,12 @@ namespace WebIfcDotNet
 
         public static string IfcValToString(this LineData lineData)
         {
-            return $"#{lineData.ExpressId}={lineData.Type}({IfcValToString(lineData.Arguments)})";
+            return $"#{lineData.ExpressId}={lineData.TypeStr()}({IfcValToString(lineData.Arguments)})";
+        }
+
+        public static string TypeStr(this LineData lineData)
+        {
+            return DotNetApi.GetNameFromTypeCode(lineData.TypeCode);
         }
     }
 }

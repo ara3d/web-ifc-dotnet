@@ -87,7 +87,6 @@ namespace  WebIfcClrWrapper
     public:
         uint32_t ExpressId = 0;
         uint32_t TypeCode = 0;
-        String^ Type = nullptr;
         List<Object^>^ Arguments = gcnew List<Object^>(0);
     };
 
@@ -469,7 +468,6 @@ namespace  WebIfcClrWrapper
            	auto lineData = gcnew LineData();
             lineData->ExpressId = expressId;
             lineData->TypeCode = lineType;
-            lineData->Type = DotNetApi::GetNameFromTypeCode(lineType);
             lineData->Arguments = DotNetApi::GetArgs(loader);
             return lineData;
         }

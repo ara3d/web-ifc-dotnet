@@ -66,6 +66,9 @@ namespace WebIfcDotNetTests
                 r.Geometries = geometries.Count;
                 m.AddStep("Retrieved geometries");
 
+                var logger = new Logger(LogWriter.ConsoleWriter, "");
+                // For when we want detailed logging. 
+                //var graph = new ModelGraph(model, logger);
                 var graph = new ModelGraph(model);
                 m.AddStep("Created graph");
 
@@ -118,6 +121,7 @@ namespace WebIfcDotNetTests
         [Test]
         public static void TestPerformance()
         {
+            //var inputFiles = MainTests.InputFiles.Take(1).ToList();
             var inputFiles = MainTests.InputFiles.ToList();
             var results = new List<RunDetails>();
             for (var i = 0; i < 1; i++)

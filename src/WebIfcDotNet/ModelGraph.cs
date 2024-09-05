@@ -31,28 +31,31 @@ namespace WebIfcDotNet
 
         public static ModelGraph Load(DotNetApi api, ILogger logger, string f)
         {
-            logger.Log($"Opening file {f}");
+            logger?.Log($"Opening file {f}");
 
             var model = api.Load(f);
-            logger.Log($"Finished loading model {model.Id}");
+            logger?.Log($"Finished loading model {model.Id}");
 
             var lineIds = model.GetLineIds();
-            logger.Log($"Id = {model.Id}, Size = {model.Size()}");
+            logger?.Log($"Id = {model.Id}, Size = {model.Size()}");
 
             var max = lineIds.Max(i => i);
-            logger.Log($"# line ids = {lineIds.Count}, max = {max}");
+            logger?.Log($"# line ids = {lineIds.Count}, max = {max}");
 
-            var g = new ModelGraph(model);
-            logger.Log($"Created graph, # parts = {g.Nodes.Count}, # of relations = {g.Relations.Count}");
+            var g = new ModelGraph(model, logger);
+            logger?.Log($"Created graph, # parts = {g.Nodes.Count}, # of relations = {g.Relations.Count}");
 
             return g;
         }
         
-        public ModelGraph(Model model)
+        public ModelGraph(Model model, ILogger logger = null)
         {
             Model = model;
 
+            logger?.Log("Retrieving geometries");
             var geos = model.GetGeometries();
+
+            logger?.Log("Creating an express ID to geometry lookup table");
             Geometries = new Dictionary<uint, Geometry>();
             var nDuplicate = 0;
             foreach (var g in geos)
@@ -62,8 +65,9 @@ namespace WebIfcDotNet
                 Geometries[g.ExpressId] = g;
             }
             if (nDuplicate != 0)
-                Debug.Write($"Found {nDuplicate} duplicate geometry IDs");
+                logger?.LogWarning($"Found {nDuplicate} duplicate geometry IDs");
 
+            logger?.Log("Creating property values");
             foreach (var prop in model.GetLines("IfcPropertySingleValue"))
             {
                 // https://standards.buildingsmart.org/IFC/RELEASE/IFC2x3/FINAL/HTML/ifcpropertyresource/lexical/ifcpropertysinglevalue.htm
@@ -118,8 +122,7 @@ namespace WebIfcDotNet
                 Nodes.Add(p.Id, p);
             }
 
-            // Get all property sets
-            // TODO: get all property sets derived from "IfcPropertySet"
+            logger?.Log("Creating property sets");
             foreach (var propSet in model.GetLines("IfcPropertySet"))
             {
                 if (propSet.Arguments.Count != 5)
@@ -131,7 +134,7 @@ namespace WebIfcDotNet
                 Nodes.Add(props.Id, props);
             }
 
-            // Get all aggregate relations
+            logger?.Log("Creating aggregate relations");
             var relAggregates = model.GetLines("IfcRelAggregates");
             foreach (var agg in relAggregates)
             {
@@ -143,7 +146,7 @@ namespace WebIfcDotNet
                 Relations.Add(agg.ExpressId, rel);
             }
 
-            // Get all spatial relations
+            logger?.Log("Creating spatial relations");
             var relContainedInSpatialStructure = model.GetLines("IfcRelContainedInSpatialStructure");
             foreach (var agg in relContainedInSpatialStructure)
             {
@@ -155,7 +158,7 @@ namespace WebIfcDotNet
                 Relations.Add(agg.ExpressId, rel);
             }
 
-            // Get all property set relations (what things have what property sets)
+            logger?.Log("Creating property set relations");
             var relPropSets = model.GetLines("IfcRelDefinesByProperties");
             foreach (var rel in relPropSets)
             {
@@ -172,7 +175,7 @@ namespace WebIfcDotNet
                 Relations.Add(rel.ExpressId, r);
             }
 
-            // Get all "type" relations (what things are of what type)
+            logger?.Log("Creating type relations");
             var relDefByType = model.GetLines("IfcRelDefinesByType");
             foreach (var rel in relDefByType)
             {
@@ -187,8 +190,7 @@ namespace WebIfcDotNet
                 Relations.Add(rel.ExpressId, r);
             }
 
-            // Associate the relations with the ids they refer to. 
-            // These are cache data structures 
+            logger?.Log("Creating lookup tables for relations from and to");
             RelationsTo = GetNodes().ToDictionary(n => n.Id, _ => new List<ModelRelation>());
             RelationsFrom = GetNodes().ToDictionary(n => n.Id, _ => new List<ModelRelation>());
             foreach (var r in GetRelations())
@@ -198,8 +200,9 @@ namespace WebIfcDotNet
                     RelationsTo[related.Id].Add(r); 
             }
 
-            SourceIds = GetRelations().Select(r => r.From.Id).Distinct().ToList();
-            SinkIds = GetRelations().SelectMany(r => r.To.Select(x => x.Id)).Distinct().ToList();
+            logger?.Log("Retrieving the root of all of the spatial relationship");
+            SourceIds = GetSpatialRelations().Select(r => r.From.Id).Distinct().ToList();
+            logger?.Log("Completed creating model graph");
         }
 
         public IEnumerable<ModelNode> GetNodes()
@@ -272,7 +275,7 @@ namespace WebIfcDotNet
         public LineData LineData { get; }
         public ModelGraph Graph { get; }
         public uint Id => LineData.ExpressId;
-        public string Type => LineData.Type;
+        public string Type => LineData.TypeStr();
 
         public ModelPart(ModelGraph graph, LineData lineData)
         {
