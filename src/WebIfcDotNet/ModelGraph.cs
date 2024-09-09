@@ -187,7 +187,7 @@ namespace WebIfcDotNet
                 TypeDefinitions.Add(relatedType.Id, relatedType);
                 foreach (var ro in relatedObjects)
                     TypeInstanceToDefinition.Add(ro.Id, relatedType);
-                Relations.Add(rel.ExpressId, r);
+                Relations.Add(rel.ExpressId, r);    
             }
 
             logger?.Log("Creating lookup tables for relations from and to");

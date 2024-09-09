@@ -8,13 +8,9 @@ using WebIfcDotNet;
 
 namespace WebIfcDotNetTests
 {
-
-
     public class MainTests
     {
         public static string OutputFolder = "C:\\Users\\cdigg\\git\\3d-format-shootout\\data\\local-untracked";
-
-        
 
         public static unsafe void OutputObj(TransformedMesh tm)
         {

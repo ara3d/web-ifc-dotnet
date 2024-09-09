@@ -12,33 +12,26 @@ namespace WebIfcDotNetTests
 {
     public static class SpeckleTests
     {
+        public static ILogger CreateLogger()
+            => new Logger(LogWriter.ConsoleWriter, "");
+
         [Test]
         public static void LoadSpeckleObjectToJson()
         {
             // https://app.speckle.systems/projects/68da6db112/models/c78d273327@6e1954cfca
 
-            var accounts = AccountManager.GetAccounts();
-            foreach (var account in accounts)
-                Console.WriteLine($"Account: {account.serverInfo.url} {account.userInfo.email}");
+            var logger = CreateLogger();
+            using var client = SpeckleUtils.LoginDefaultClient(logger);
 
-            Console.WriteLine($"Getting default account for this machine");
-            var defaultAccount = AccountManager.GetDefaultAccount();
-            if (defaultAccount == null)
-                throw new Exception(
-                    "Could not find a default account. You may need to install and run the Speckle Manager");
-
-            Console.WriteLine($"Authenticating with this accoutn");
-            using var client = new Client(defaultAccount);
-
-            Console.WriteLine($"Getting the main branch and retrieving a model");
+            logger?.Log($"Getting the main branch and retrieving a model");
             var projectId = "68da6db112";
             var modelId = "c78d273327";
             var model = client.Model.Get(modelId, projectId).Result;
-            Console.WriteLine($"Retrieved model {model.name}:{model.id}");
+            logger?.Log($"Retrieved model {model.name}:{model.id}");
 
             // Create the server transport for the specified stream.
-            var transport = new ServerTransport(defaultAccount, projectId);
-            Console.WriteLine($"Created transport {transport.BaseUri}");
+            var transport = new ServerTransport(client.Account, projectId);
+            logger?.Log($"Created transport {transport.BaseUri}");
 
             // Receive the object
 
@@ -46,37 +39,28 @@ namespace WebIfcDotNetTests
             var firstVersion = versionList.items.FirstOrDefault()?.id;
             if (firstVersion == null)
                 throw new Exception("No versions found for this model");
-            Console.WriteLine($"Found version {firstVersion}");
+            logger?.Log($"Found version {firstVersion}");
 
             var objectId = client.Version.Get(firstVersion, modelId, projectId).Result.referencedObject;
-            Console.WriteLine($"Object ID: {objectId}");
+            logger?.Log($"Object ID: {objectId}");
 
-            Console.WriteLine($"Receiving object: {objectId}");
+            logger?.Log($"Receiving object: {objectId}");
             var baseRoot = Operations.Receive(objectId, transport).Result;
-            Console.WriteLine($"Receipt successful: {baseRoot.id}");
+            logger?.Log($"Receipt successful: {baseRoot.id}");
 
             var convertedRoot = baseRoot.ToSpeckleObject();
 
             var tmp = PathUtil.CreateTempFile("json");
             var json = convertedRoot.ToJson();
             tmp.WriteAllText(json);
-            Console.WriteLine($"Wrote json to: {tmp}");
+            logger?.Log($"Wrote json to: {tmp}");
             ProcessUtil.OpenFile(tmp);
-        }
-
-        public static void WriteToSqlDatabase(Base root, FilePath fp)
-        {
-            // Write to a local database 
-            var tmp = Path.GetTempPath();
-            var localSql = new SQLiteTransport(tmp);
-            Operations.Send(root, new[] { localSql });
         }
 
         public static Base IfcFileToBase(FilePath fp)
         {
             var api = new DotNetApi();
-            var logger = new Logger(LogWriter.ConsoleWriter, "");
-            var g = ModelGraph.Load(api, logger, fp);
+            var g = ModelGraph.Load(api, CreateLogger(), fp);
             return g.ToSpeckle();
         }
 
@@ -88,14 +72,39 @@ namespace WebIfcDotNetTests
 
             var convertedRoot = b.ToSpeckleObject();
 
+            var logger = CreateLogger();
             var tmp = PathUtil.CreateTempFile("json");
             var json = convertedRoot.ToJson();
             tmp.WriteAllText(json);
-            Console.WriteLine($"Wrote json to: {tmp}");
+            logger?.Log($"Wrote json to: {tmp}");
             ProcessUtil.OpenFile(tmp);
         }
 
-        public static string ToJson(Base speckleBase)
-            => speckleBase.ToSpeckleObject().ToJson();
+        [Test]
+        public static void ListModels()
+        {
+            var logger = CreateLogger();
+            var client = SpeckleUtils.LoginDefaultClient(logger);
+            //var models = client.GetModels("68da6db112");
+            var models = client.GetModels("d1553c3803");
+            logger?.Log($"Found {models.Count()} models");
+            foreach (var m in models)
+                logger?.Log($"{m.name}:{m.id}");
+        }
+
+        [Test]
+        public static void PushAc20Haus()
+        {
+            var logger = CreateLogger();
+            var f = new FilePath("C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc");
+            logger?.Log($"Converting {f} to Speckle");
+            var b = IfcFileToBase(f);
+            logger?.Log($"Conversion completed");
+            var client = SpeckleUtils.LoginDefaultClient(logger);
+            var result = client.PushModel("d1553c3803", f.GetFileName(), b, logger);
+            logger?.Log(result);
+
+            // NOTE: result was 2c10c3de0760243236c8c2583c3bbc21
+        }
     }
 }

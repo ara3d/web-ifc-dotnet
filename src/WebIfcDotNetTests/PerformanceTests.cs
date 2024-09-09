@@ -2,7 +2,7 @@
 using Ara3D.Logging;
 using Ara3D.Utils;
 using WebIfcClrWrapper;
-using WebIfcDotNet;
+using ModelGraph = WebIfcDotNet.ModelGraph;
 
 namespace WebIfcDotNetTests
 {
@@ -88,6 +88,7 @@ namespace WebIfcDotNetTests
             return r;
         }
 
+        
         public static void OutputStep(Measurement m, int n)
         {
             Console.WriteLine(
