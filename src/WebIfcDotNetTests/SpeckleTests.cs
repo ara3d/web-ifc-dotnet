@@ -103,8 +103,21 @@ namespace WebIfcDotNetTests
             var client = SpeckleUtils.LoginDefaultClient(logger);
             var result = client.PushModel("d1553c3803", f.GetFileName(), b, logger);
             logger?.Log(result);
+        }
 
-            // NOTE: result was 2c10c3de0760243236c8c2583c3bbc21
+        [Test]
+        public static void MoveHaus()
+        {
+            var logger = CreateLogger();
+            var client = SpeckleUtils.LoginDefaultClient(logger);
+
+            // https://app.speckle.systems/projects/68da6db112/models/c78d273327
+            var srcModel = client.PullModelFromId("68da6db112", "c78d273327", logger);
+
+            // https://app.speckle.systems/projects/d1553c3803/models/15e913104e
+            var result = client.PushModelToId("d1553c3803", "15e913104e", srcModel, logger);
+
+            Console.WriteLine($"Got model and pushed it somwhere else. Result was {result}");
         }
     }
 }

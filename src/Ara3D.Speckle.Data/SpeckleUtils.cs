@@ -4,12 +4,14 @@ using System.IO;
 using System.Linq;
 using Ara3D.Logging;
 using Ara3D.Utils;
+using Objects.Structural.Analysis;
 using Speckle.Core.Api;
 using Speckle.Core.Api.GraphQL.Inputs;
 using Speckle.Core.Api.GraphQL.Models;
 using Speckle.Core.Credentials;
 using Speckle.Core.Models;
 using Speckle.Core.Transports;
+using Model = Speckle.Core.Api.GraphQL.Models.Model;
 
 namespace Ara3D.Speckle.Data
 {
@@ -59,7 +61,7 @@ namespace Ara3D.Speckle.Data
         }
 
         public static Model GetModelOrDefault(this Client client, string projectId, string name)
-            => client.Model.GetModels(projectId).Result.items.FirstOrDefault(m => m.name == name);
+            => client.GetModels(projectId).FirstOrDefault(m => m.name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
         public static Model GetModelOrCreate(this Client client, string projectId, string name, ILogger logger)
         {
@@ -69,7 +71,7 @@ namespace Ara3D.Speckle.Data
                 logger?.Log($"Found model {model.name}:{model.id}");
                 return model;
             }
-
+            logger?.Log($"No model named '{name}' found so creating one");
             return client.CreateModel(projectId, name, logger);
         }
 
@@ -78,7 +80,11 @@ namespace Ara3D.Speckle.Data
             logger?.Log($"Pushing model {name} to project {projectId}");
             var model = client.GetModelOrCreate(projectId, name, logger);
             logger?.Log($"Model Id = {model.id}");
+            return client.PushModelToId(projectId, model.id, root, logger);
+        }
 
+        public static string PushModelToId(this Client client, string projectId, string modelId, Base root, ILogger logger)
+        {
             logger?.Log($"Sending the Base object to a transport and getting the object ID");
             var transport = new ServerTransport(client.Account, projectId);
             var objectId = Operations.Send(root, new List<ITransport> { transport }).Result;
@@ -88,13 +94,48 @@ namespace Ara3D.Speckle.Data
             var commitInput = new CommitCreateInput
             {
                 objectId = objectId,
-                branchName = "main", // or any other branch name
-                message = "Initial commit",
-                sourceApplication = "Ara3D"
+                branchName = modelId,
+                streamId = projectId
             };
 
             logger?.Log($"Creating a commit with the object ID");
             return client.Version.Create(commitInput).Result;
+        }
+
+        public static Base PullModelFromId(this Client client, string projectId, string modelId, ILogger logger)
+        {
+            logger?.Log($"Getting the latest commit for the model");
+            var versionList = client.Version.GetVersions(modelId, projectId, 1).Result;
+            var firstVersion = versionList.items.FirstOrDefault()?.id;
+            if (firstVersion == null)
+                throw new Exception("No versions found for this model");
+            logger?.Log($"Found version {firstVersion}");
+
+            var objectId = client.Version.Get(firstVersion, modelId, projectId).Result.referencedObject;
+            logger?.Log($"Object ID: {objectId}");
+
+            return client.PullObject(projectId, objectId, logger);
+        }
+
+        public static Base PullObject(this Client client, string projectId, string objectId, ILogger logger)
+        {
+            logger?.Log($"Creating a ServerTransport object for the project");
+            var transport = new ServerTransport(client.Account, projectId);
+
+            var baseRoot = Operations.Receive(objectId, transport).Result;
+            logger?.Log($"Receipt successful: {baseRoot.id}");
+
+            return baseRoot;
+        }
+
+        public static Base PullModel(this Client client, string projectId, string name, ILogger logger)
+        {
+            logger?.Log($"Pulling model {name} from project {projectId}");
+            var model = client.GetModelOrDefault(projectId, name);
+            if (model == null)
+                throw new Exception($"Model {name} not found in project {projectId}");
+            logger?.Log($"Model Id = {model.id}");
+            return client.PullModelFromId(projectId, name, logger);
         }
     }
 }

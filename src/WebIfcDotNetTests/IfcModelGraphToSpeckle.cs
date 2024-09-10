@@ -1,3 +1,4 @@
+using System.Reflection;
 using Ara3D.Logging;
 using Speckle.Core.Models;
 using Objects.Geometry;
@@ -105,16 +106,20 @@ public static class IfcModelGraphToSpeckle
         }
 
         b["type"] = n.Type;
+
+        // This is required because "speckle_type" has no setter, but is backed by a private field.  
+        var baseType = typeof(Base);
+        var typeField = baseType.GetField("_type", BindingFlags.Instance | BindingFlags.NonPublic);
+        typeField?.SetValue(b, n.Type);
+
         b["expressID"] = n.Id;
 
-        /* TODO: Add geometries and '@displayValue' properties. 
         if (n.Graph.Geometries.TryGetValue(n.Id, out var m))
         {
             var c = m.ToSpeckle();
             if (c.elements.Count > 0)
-                b["@displayValue"] = c;
+                b["displayValue"] = c.elements;
         }
-        */
 
         var children = n.GetChildren().Select(ToSpeckle).ToList();
         b["elements"] = children;
