@@ -75,7 +75,7 @@ public static class IfcModelGraphToSpeckle
                 return IfcValJsonObject(lv.Arguments.Count == 1 
                     ? lv.Arguments[0] 
                     : lv.Arguments);
-            case EnumValue ev:
+            case EnumValue ev:  
                 return ev.Name;
             case RefValue rv:
                 return rv.ExpressId;
@@ -105,7 +105,8 @@ public static class IfcModelGraphToSpeckle
             b["GlobalId"] = ps.Guid;
         }
 
-        b["type"] = n.Type;
+        // https://github.com/specklesystems/speckle-server/issues/1180
+        b["ifc_type"] = n.Type;
 
         // This is required because "speckle_type" has no setter, but is backed by a private field.  
         var baseType = typeof(Base);

@@ -106,6 +106,29 @@ namespace WebIfcDotNetTests
         }
 
         [Test]
+        public static void PushAllTestFiles()
+        {
+            var inputFiles = MainTests.InputFiles.ToList();
+            foreach (var f in inputFiles)
+            {
+                var logger = CreateLogger();
+                try
+                {
+                    logger?.Log($"Converting {f} to Speckle");
+                    var b = IfcFileToBase(f);
+                    logger?.Log($"Conversion completed");
+                    var client = SpeckleUtils.LoginDefaultClient(logger);
+                    var result = client.PushModel("d1553c3803", f.GetFileName(), b, logger);
+                    logger?.Log(result);
+                }
+                catch (Exception e)
+                {
+                    logger?.LogError(e);
+                }
+            }
+        }
+
+        [Test]
         public static void MoveHaus()
         {
             var logger = CreateLogger();

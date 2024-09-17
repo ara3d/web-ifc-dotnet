@@ -9,6 +9,7 @@
     <IsTestProject>true</IsTestProject>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <PlatformTarget>x64</PlatformTarget>
+    <RunPostBuildEvent>Always</RunPostBuildEvent>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,5 +33,9 @@
     <ProjectReference Include="..\WebIfcClrWrapper\WebIfcClrWrapper.vcxproj" />
     <ProjectReference Include="..\WebIfcDotNet\WebIfcDotNet.csproj" />
   </ItemGroup>
+
+  <Target Name="PostBuild" AfterTargets="PostBuildEvent">
+    <Exec Command="xcopy /Y /I &quot;$(SolutionDir)\WebIfcDll\output\web-ifc-dll.dll&quot; &quot;$(TargetDir)&quot;&#xA;" />
+  </Target>
 
 </Project>
