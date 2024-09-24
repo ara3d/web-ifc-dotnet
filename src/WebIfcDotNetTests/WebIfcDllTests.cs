@@ -1,4 +1,6 @@
-﻿using Ara3D.Logging;
+﻿using Ara3D.IfcParser;
+using Ara3D.Logging;
+using Ara3D.Utils;
 using WebIfcClrWrapper;
 
 namespace WebIfcDotNetTests;
@@ -9,7 +11,7 @@ public static class WebIfcDllTests
         => new Logger(LogWriter.ConsoleWriter, "");
 
 
-    const string inputFile =
+    public static FilePath inputFile =
         "C:\\Users\\cdigg\\git\\web-ifc-dotnet\\src\\engine_web-ifc\\tests\\ifcfiles\\public\\AC20-FZK-Haus.ifc";
 
     [Test]
@@ -42,5 +44,57 @@ public static class WebIfcDllTests
         logger.Log("Finished retrieving all geometries from 2nd API");
 
         WebIfcDll.FinalizeApi(api2);
+    }
+
+    public static IfcGraph LoadIfc(FilePath f)
+    {
+        var logger = CreateLogger();
+        logger.Log($"Opening STEP document {f.GetFileName()}");
+        var d = new StepDocument(f);
+        logger.Log("Creating graph");
+        var g = new IfcGraph(d, logger);
+        logger.Log($"# node = {g.Nodes.Count}");
+        logger.Log($"# relations = {g.Relations.Count}");
+        return g;
+    }
+
+    [Test]
+    public static void TestMultiThreadedLoader()
+    {
+        var logger = CreateLogger();
+        logger.Log($"Opening file {inputFile.GetFileName()}");
+        var api2 = WebIfcDll.InitializeApi();
+        IfcGraph g = null;
+        IntPtr model2 = IntPtr.Zero;
+        Parallel.Invoke(
+            () =>
+            {
+                model2 = WebIfcDll.LoadModel(api2, inputFile);
+            },
+            () =>
+            {
+                g = LoadIfc(inputFile);
+            });
+        logger.Log("Loaded model and graph");
+
+        foreach (var n in g.GetNodes())
+        {
+            if (n.Type.ToUpperInvariant().Contains("WALL"))
+            {
+                Console.WriteLine($"Found wall {n.Id}");
+                var geo = WebIfcDll.GetGeometry(api2, model2, n.Id);
+                var numMeshes = WebIfcDll.GetNumMeshes(api2, geo);
+                Console.WriteLine($"Meshes = {numMeshes}");
+                for (var i = 0; i < numMeshes; ++i)
+                {
+                    var mesh = WebIfcDll.GetMesh(api2, geo, i);
+                    var numVertices = WebIfcDll.GetNumVertices(api2, mesh);
+                    var numIndices = WebIfcDll.GetNumIndices(api2, mesh);
+                    Console.WriteLine($"Mesh {i}: # verts = {numVertices}, # indices {numIndices}");
+                }
+            }
+        }
+
+        logger.Log("Enumerated over all nodes");
     }
 }

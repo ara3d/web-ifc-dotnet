@@ -29,13 +29,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\..\ara3d\IFC-toolkit\Ara3D.IfcParser\Ara3D.IfcParser.csproj" />
+    <ProjectReference Include="..\..\..\ara3d\src\Ara3D.Logging\Ara3D.Logging.csproj" />
+    <ProjectReference Include="..\..\..\ara3d\Utils\Ara3D.Utils\Ara3D.Utils.csproj" />
     <ProjectReference Include="..\Ara3D.Speckle.Data\Ara3D.Speckle.Data.csproj" />
     <ProjectReference Include="..\WebIfcClrWrapper\WebIfcClrWrapper.vcxproj" />
     <ProjectReference Include="..\WebIfcDotNet\WebIfcDotNet.csproj" />
   </ItemGroup>
 
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
-    <Exec Command="xcopy /Y /I &quot;$(SolutionDir)\WebIfcDll\output\web-ifc-dll.dll&quot; &quot;$(TargetDir)&quot;&#xA;" />
+    <Exec Command="xcopy /Y /I &quot;C:\Users\cdigg\git\web-ifc-dotnet\src\WebIfcDll\output\web-ifc-dll.dll&quot; &quot;$(TargetDir)&quot;&#xA;" />
   </Target>
 
 </Project>
