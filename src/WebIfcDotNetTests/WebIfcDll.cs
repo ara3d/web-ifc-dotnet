@@ -5,7 +5,8 @@ namespace WebIfcDotNetTests
 
     public static class WebIfcDll
     {
-        private const string DllName = "web-ifc-dll.dll"; // Replace with the name of your DLL
+        // NOTE: make sure the DLL is in the same directory as the built DLLs or Executable. 
+        private const string DllName = "web-ifc-dll.dll"; 
 
         // InitializeApi
         [DllImport(DllName, CallingConvention = CallingConvention.Cdecl)]

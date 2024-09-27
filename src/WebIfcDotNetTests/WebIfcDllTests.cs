@@ -1,5 +1,6 @@
 ﻿using Ara3D.IfcParser;
 using Ara3D.Logging;
+using Ara3D.StepParser;
 using Ara3D.Utils;
 using WebIfcClrWrapper;
 

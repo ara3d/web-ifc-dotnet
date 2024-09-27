@@ -21,7 +21,6 @@
 
  
   <ItemGroup>
-    <ProjectReference Include="..\..\..\web-ifc-dotnet\src\WebIfcClrWrapper\WebIfcClrWrapper.vcxproj" />
     <ProjectReference Include="..\..\..\web-ifc-dotnet\src\WebIfcDotNetTests\WebIfcDotNetTests.csproj" />
     <ProjectReference Include="..\Ara3D.Speckle.Data\Ara3D.Speckle.Data.csproj" />
   </ItemGroup>

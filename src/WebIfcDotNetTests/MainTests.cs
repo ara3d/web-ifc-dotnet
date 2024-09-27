@@ -53,7 +53,7 @@ namespace WebIfcDotNetTests
                 var c = fp[f * 3 + 2] + 1;
                 lines.Add($"f {a} {b} {c}");
             }
-
+            
             File.WriteAllLines(filePath, lines);
         }
 

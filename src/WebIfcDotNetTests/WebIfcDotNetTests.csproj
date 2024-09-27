@@ -13,12 +13,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Ara3D.Buffers" Version="1.4.3" />
     <PackageReference Include="Ara3D.Geometry" Version="1.4.3" />
     <PackageReference Include="Ara3D.Graphics" Version="1.4.3" />
-    <PackageReference Include="Ara3D.Logging" Version="1.4.3" />
     <PackageReference Include="Ara3D.Mathematics" Version="1.4.3" />
-    <PackageReference Include="Ara3D.Utils" Version="1.4.3" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0" />
     <PackageReference Include="NUnit" Version="3.13.3" />
     <PackageReference Include="NUnit3TestAdapter" Version="4.2.1" />
@@ -33,7 +30,6 @@
     <ProjectReference Include="..\..\..\ara3d\src\Ara3D.Logging\Ara3D.Logging.csproj" />
     <ProjectReference Include="..\..\..\ara3d\Utils\Ara3D.Utils\Ara3D.Utils.csproj" />
     <ProjectReference Include="..\Ara3D.Speckle.Data\Ara3D.Speckle.Data.csproj" />
-    <ProjectReference Include="..\WebIfcClrWrapper\WebIfcClrWrapper.vcxproj" />
     <ProjectReference Include="..\WebIfcDotNet\WebIfcDotNet.csproj" />
   </ItemGroup>
 

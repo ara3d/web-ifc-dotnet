@@ -95,29 +95,39 @@ struct Model
     IfcGeometryProcessor* geometryProcessor;
     std::unordered_map<uint32_t, ::Geometry*> geometries;
 
-    Model(IfcLoader* loader, IfcGeometryProcessor* processor, uint32_t id)
+    Model(IfcSchemaManager* schemas, IfcLoader* loader, IfcGeometryProcessor* processor, uint32_t id)
         : loader(loader), geometryProcessor(processor), id(id)
-    {}
+    {
+        for (auto type : schemas->GetIfcElementList())
+        {
+            // TODO: maybe some of these elments are desired. In fact, I think there may be explicit requests for IFCSPACE?
+            if (type == IFCOPENINGELEMENT
+                || type == IFCSPACE
+                || type == IFCOPENINGSTANDARDCASE)
+            {
+                continue;
+            }
+
+            for (auto eId : loader->GetExpressIDsWithType(type))
+            {
+                auto flatMesh = geometryProcessor->GetFlatMesh(eId);
+                auto g = new ::Geometry(eId);
+                for (auto& placedGeom : flatMesh.geometries)
+                {
+                    auto mesh = ToMesh(placedGeom);
+                    g->meshes.push_back(mesh);
+                }
+                geometries[eId] = g;
+            }
+        }        
+    }
 
     ::Geometry* GetGeometry(uint32_t id)
     {
         auto it = geometries.find(id);
         if (it == geometries.end())
-            return LoadGeometry(id);
+            return nullptr;
         return it->second;
-    }
-
-    ::Geometry* LoadGeometry(uint32_t id)
-    {
-        auto flatMesh = geometryProcessor->GetFlatMesh(id);
-        auto geom = new ::Geometry(id);
-
-        for (auto& placedGeom : flatMesh.geometries) {
-            auto mesh = ToMesh(placedGeom);
-            geom->meshes.push_back(mesh);
-        }
-
-        return geometries[id] = geom;
     }
 
     Mesh* ToMesh(IfcPlacedGeometry& pg) 
@@ -152,7 +162,7 @@ struct Api
         // NOTE: may fail if the file has unicode characters. This needs to be tested  
         ifs.open(fileName, std::ifstream::in);
         loader->LoadFile(ifs);
-        return new ::Model(loader, manager->GetGeometryProcessor(modelId), modelId);
+        return new ::Model(schemaManager, loader, manager->GetGeometryProcessor(modelId), modelId);
     }
 };
 
