@@ -1,5 +1,10 @@
 # Web IFC .NET
 
+## DEPRECATED: This project is now superceded by the [Ara 3D IFC-toolkit](https://github.com/ara3d/IFC-toolkit/)
+
+Rationale: we need to run on multiple platforms and C++/CLI is restricted to Windows only. 
+ 
+## About 
 A [C++/CLI wrapper](https://en.wikipedia.org/wiki/C%2B%2B/CLI) around the 
 [C++ code](https://github.com/ThatOpen/engine_web-ifc/tree/main/src/cpp) 
 powering the [Web IFC library](https://github.com/ThatOpen/engine_web-ifc)
